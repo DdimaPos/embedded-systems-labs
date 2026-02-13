@@ -1,0 +1,38 @@
+\section{Domain Analysis}
+\subsection{Application Context and Utilized Technologies}
+The primary objective of this laboratory work is to establish a communication bridge between a workstation (PC) and an embedded system (MCU) using the \textbf{UART (Universal Asynchronous Receiver-Transmitter)} protocol. This interaction is fundamental in embedded engineering for debugging, real-time sensor monitoring, and remote command execution.
+
+The application leverages the standard input/output library (\texttt{STDIO}) adapted for microcontroller environments. This approach allows the use of classic C functions, such as \texttt{printf()} and \texttt{scanf()}, to abstract the hardware registers of the serial port. This provides a human-readable interface for transmitting and receiving text-based commands, moving away from raw byte manipulation to a more sophisticated command-line interaction.
+
+\subsection{Hardware and Software Components}
+
+\begin{table}[h!]
+\centering
+\caption{Hardware and Software Stack}
+\begin{tabular}{@{}p{4cm} p{10cm}@{}}
+\textbf{Component} & \textbf{Role and Justification} \\ \midrule
+\textbf{Microcontroller} & The central processing unit (e.g., ATmega328P) that parses the incoming character stream and toggles GPIO pin states. \\
+\textbf{Serial-to-USB Interface} & Facilitates the translation of the MCU's logic levels into USB protocol for communication with the PC terminal. \\
+\textbf{LED \& $220\,\Omega$ Resistor} & The output peripheral used for visual validation. The resistor ensures current limiting to protect the component. \\
+\textbf{Neovim + Arduino-nvim} & The chosen development environment (IDE). Neovim provides high-efficiency editing, while the plugin integrates \texttt{arduino-cli} for compilation. \\
+\textbf{Serial Monitor} & The terminal emulator used to send the "led on" and "led off" strings and display confirmation responses. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{System Architecture and Solution Justification}
+The system adopts a \textbf{Command Parser architecture}. This solution was chosen to ensure extensibility; by utilizing the \texttt{STDIO} library, the code becomes more portable and readable compared to direct manipulation of UART circular buffers.
+
+
+
+The data flow is structured as follows:
+\begin{enumerate}
+    \item \textbf{Input:} The user enters a string command via the Neovim-integrated terminal or a standalone console.
+    \item \textbf{Transmission:} Data is sent asynchronously to the MCU via the TX/RX lines.
+    \item \textbf{Processing:} Functions like \texttt{scanf()} or \texttt{fgets()} capture the string, which is then passed to a logic module that compares the input against predefined instructions.
+    \item \textbf{Action:} The MCU interacts with the LED driver module to change the physical state of the hardware.
+\end{enumerate}
+
+\subsection{Relevant Case Study}
+A real-world application of this concept is the \textbf{Command Line Interface (CLI)} found in network infrastructure equipment. Technicians connect via a console port (serial) to input text commands for hardware configuration. Similarly, in industrial automation, this interface is used for field calibration of sensors where a complex graphical user interface (GUI) is not feasible or required.
+
+\end{document}
