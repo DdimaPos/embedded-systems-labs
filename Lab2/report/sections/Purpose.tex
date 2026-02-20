@@ -1,0 +1,35 @@
+\section{Purpose of laboratory work}
+
+Purpose of the laboratory work is to study and use the STDIO library for serial communication
+and implementing a programm that would permit controlling the led with the following commands:
+
+\begin{enumerate}
+  \item "led on" - turn the LED on
+  \item "lef off" - turn the LED off
+\end{enumerate}
+
+\subsection{Objectives of the laboratory work}
+
+Laboratory work has the following objectives that should be achieved:
+
+\begin{itemize}
+  \item Understanding the basic principles of the serial communication with MCU
+  \item Using the STDIO library for input/output message exchange
+  \item Designing an application that interprets commands sent through serial interface
+  \item Developing the code in a modular architecture, with separate functionalities for controling the peripherics
+\end{itemize}
+
+\subsection{Problem definition}
+
+\begin{enumerate}
+  \item Configure application for interaction using STDIO library through serial interface for 
+    text exchange through terminal
+  \item Design an application for the MCU board that will intercept commands through terminal through serial
+    interface to set up the state of the LED
+      \begin{itemize}
+        \item "led on" for turning on the LED
+        \item "led off" for turning off the LED
+        \item system should respond with text messages that confirm the state change
+        \item for text exchange the stdio library should be used
+      \end{itemize}
+\end{enumerate}

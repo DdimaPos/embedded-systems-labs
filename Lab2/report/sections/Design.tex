@@ -1,0 +1,72 @@
+\section{Design}
+
+\subsection{Architectural sketch}
+
+Below is the architectural schetch of the components structured in the diagram that highlights the 
+software and hardware components.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{./img/architecturediagram.jpg}
+    \caption{Architectural sketch of the project}
+    \label{fig:archi}
+\end{figure}
+
+This is the description of each of the elements of the diagram:
+\begin{enumerate}
+  \item \textbf{Arduino Uno microcontroller} - central processing unit board that serves as a executor
+    of software
+  \item \textbf{LED} - hardware component which represents a semiconductor diode that serves as output
+    for the user
+  \item \textbf{Serial STDIO module} - software module that serves as driver for adapting the default I/O 
+    commands like \texttt{printf();scanf()} to work with MCU's serial write and read
+  \item \textbf{Led module} - software module that is a driver that controls internally the state of the 
+    LED and provides the user-friendly abstractions that will not disclose internals about how it is implemented.
+\end{enumerate}
+
+\subsection{Electrical sketch}
+
+The circuit diagram outlines the setup for this project, showing the connections between
+the Arduino, an LED, and the computer for serial communication. It details the LED’s
+connection to the Arduino’s pin 13 (default LED pin), including a resistor to limit current and prevent damage
+to the LED by keeping it within safe electrical limits. The LED’s circuit is completed by
+connecting its ground to the Arduino’s ground.
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{./img/circuit_sketch_wokwi.jpg}
+    \caption{Circuit sketched on wokwi}
+    \label{fig:wokwi}
+\end{figure}
+
+Figure \ref{fig:wokwi} details the connections and components that make up the system. This visual
+documentation is crucial for replicating the setup or diagnosing issues, as it clearly shows
+how each component is integrated into the overall design. Understanding the electrical
+connections is essential for both the construction and troubleshooting phases of the project.
+
+\subsection{Flow chart}
+
+The Figure \ref{fig:flow} highlights how the Arduino’s USB interface is used for serial com-
+munication with a computer. This enables the use of the Arduino IDE or terminal software
+to issue commands like ”led on” and ”led off” to the Arduino, which then switches the LED
+on or off accordingly.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.62\textwidth]{./img/flow.jpg}
+    \caption{Flow chart of the algorithm}
+    \label{fig:flow}
+\end{figure}
+
+\subsection{Code design}
+
+Code is developed to followed the principle of the interface and the 
+implementation, by creating for each header file \texttt{.h} a respective 
+\texttt{.cpp} file that implements it. At the same time the most important
+part of the implementation is separation of the \textbf{driver} and 
+\textbf{abstraction} layer. Abstraction layer is the main portable program that calls
+low level modules. This makes the program portable to any device, ensuring that only the driver
+level is adapted properly. Driver level contains the low level logic related to specific
+hardware. In my case it contains all the calls to Serial port and LED power control using 
+the \texttt{<Arduino.h>} library.

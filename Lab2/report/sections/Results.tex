@@ -1,0 +1,82 @@
+\subsection{Results}
+
+For running the application following commands were used for compiling, 
+uploading the project and monitoring the port to send the commands.
+
+\begin{verbatim}
+# to find to which port number the board is connected
+arduino-cli board list 
+# compilation of the programm by indicating the target hardware
+arduino-cli compile --fqbn arduino:avr:uno sketch
+# uploading the program executables to the board
+arduino-cli upload -p /dev/cu.usbserial-portnumber --fqbn arduino:avr:uno sketch
+# monitoring the port to which the active board is connected
+arduino-cli monitor -p /dev/cu.usbserial-portnumber 
+\end{verbatim}
+
+Below is the output of the commands listed above
+
+\begin{verbatim}
+$ arduino-cli compile --fqbn arduino:avr:uno sketch              
+Sketch uses 3918 bytes (12%) of program storage space. Maximum is 32256 bytes.
+Global variables use 400 bytes (19%) of dynamic memory, leaving 1648 bytes for local variables. Maximum is 2048 bytes.
+
+$ arduino-cli upload -p /dev/cu.usbserial-1120 --fqbn arduino:avr:uno sketch                                         
+New upload port: /dev/cu.usbserial-1120 (serial)
+
+$ arduino-cli monitor -p /dev/cu.usbserial-1120                                                                     
+Using generic monitor configuration.
+WARNING: Your board may require different settings to work!
+
+Monitor port settings:
+  baudrate=9600
+  bits=8
+  dtr=on
+  parity=none
+  rts=on
+  stop_bits=1
+
+Connecting to /dev/cu.usbserial-1120. Press CTRL-C to exit.
+
+[DEBUG] System Ready. type led 
+[DEBUG] System Ready. type led on/led off to control the led
+led on
+[INFO] Led was turned on
+led off
+[INFO] Led was turned off
+led sos
+[SOS] SOS SOS
+\end{verbatim}
+
+Below there is the visual representation of the circuit
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/ledoff.jpg}
+    \caption{Led state after typing "led off"}
+    \label{fig:ledoff}
+\end{figure}
+
+After typing \texttt{led off} the visual state of the 
+LED does not change (Figure \ref{fig:ledoff}). This is expected behavior since the electrical
+in not emitter from the LED pin.
+
+\clearpage
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/ledon.jpg}
+    \caption{Led state after typing "led on"}
+    \label{fig:ledon}
+\end{figure}
+
+After typing \texttt{led on} the visual state of the 
+led changes to active, since now the electrical current is emited
+on the pin 13 (Figure \ref{fig:ledon}).
+
+Additionally the \texttt{led sos} command was implemented by using the
+\texttt{delay()} function that will stops the execution by specified time
+which allows to send the signals at the desired intervals of time. In this case it is used to
+send the sos signal in Morse code \texttt{...\_\_\_...} (3 long signals, 3 short signals, 3 long signals). 
+The result of this command and other commands can be seen in the video posted 
+on YouTube video hosting platform. \url{https://youtu.be/vp0BN4FRQHY?si=EbB3ROkQ5iNmlyLn}
+

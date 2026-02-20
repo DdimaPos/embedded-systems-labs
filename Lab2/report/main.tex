@@ -1,0 +1,122 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{fancyhdr}
+\usepackage{geometry}
+\usepackage{dirtytalk}
+\usepackage[english]{babel}
+\usepackage{csquotes}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Define colors for listings
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstset{
+    language=C++,
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{black},
+    title=\lstname
+}
+
+
+\begin{document}
+\begin{titlepage}
+\begin{center}
+    \includegraphics[width=0.3\textwidth]{image.png} \\[0.2cm]
+
+    \textbf{MINISTRY OF EDUCATION, CULTURE AND RESEARCH
+OF THE REPUBLIC OF MOLDOVA} \\[0.3cm]
+
+    \textbf{Technical University of Moldova
+Faculty of Computers, Informatics and Microelectronics
+Department of Software and Automation Engineering} \\[2cm]
+
+    \textbf{Postoronca Dumitru FAF-233}\\[0.5cm]
+
+    \Huge \textbf{Report} \\[0.5cm]
+
+    \large Laboratory work n.1 \\[0.5cm]
+
+    \textbf{on Embedded Systems} \\[3cm]
+
+    \begin{flushright}
+        \textit{Checked by:} \\
+        \textbf{A. Martiniuc}, \textit{university assistant} \\
+        DISA, FCIM, UTM
+    \end{flushright}
+
+    \vfill
+
+    Chișinău -- 2026
+\end{center}
+\end{titlepage}
+
+
+\newpage
+\setcounter{page}{1}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{FAF-233 Postoronca Dumitru ; Laboratory Work №1}
+
+\include{sections/Purpose.tex}
+
+\clearpage
+\include{sections/DomainAnalysis.tex}
+
+\clearpage
+\include{sections/Design.tex}
+
+\clearpage
+\include{sections/Results.tex}
+
+\clearpage
+\include{sections/Conclusions.tex}
+
+
+\clearpage
+\include{sections/Bibliography.tex}
+
+\include{sections/Appendix.tex}
+\end{document}
+
+% Image display sample
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=1\textwidth]{./img/10E.png}
+%     \caption{Circuit for Task 10E}
+%     \label{fig:label}
+% \end{figure}
+% text \ref{fig:label}
+
+% code insertion sample
+% \begin{verbatim}
+% \end{verbatim}
+
+% code insertion sample - with highlighting
+% \begin{lstlisting}
+% \end{lstlisting}
+
