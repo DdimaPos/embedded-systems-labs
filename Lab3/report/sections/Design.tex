@@ -1,0 +1,99 @@
+\section{Design}
+
+\subsection{Architectural sketch}
+
+Below is the architectural sketch of the components structured in the diagram that highlights the
+software and hardware components.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{./img/architecturediagram.png}
+    \caption{Architectural sketch of the project}
+    \label{fig:archi}
+\end{figure}
+
+This is the description of each of the elements of the diagram:
+\begin{enumerate}
+  \item \textbf{Arduino Uno microcontroller} -- central processing unit board that runs the cooperative
+    scheduler and executes all application tasks
+  \item \textbf{Button (pin 2)} -- input peripheral with internal pull-up resistor, used by Task 1 to
+    detect press/release transitions
+  \item \textbf{Green LED (pin 13)} -- output indicator for short button presses ($< 500$ ms)
+  \item \textbf{Red LED (pin 12)} -- output indicator for long button presses ($\geq 500$ ms)
+  \item \textbf{Yellow LED (pin 11)} -- output indicator that blinks rapidly to acknowledge each press
+  \item \textbf{Scheduler module} -- software service that manages task execution using context structures
+    with recurrence, offset, and countdown counter
+  \item \textbf{Serial STDIO module} -- software driver that redirects \texttt{printf()} output to the
+    UART serial interface for periodic report transmission
+  \item \textbf{LED driver module} -- software driver providing abstractions for controlling each LED
+    independently
+  \item \textbf{Button driver module} -- software driver providing debounced button state reading
+\end{enumerate}
+
+\subsection{Electrical sketch}
+
+The circuit diagram outlines the setup for this project, showing the connections between
+the Arduino, three LEDs (green, red, yellow), a push button, and the computer for serial
+communication. Each LED is connected to its respective Arduino pin through a $220\,\Omega$
+current-limiting resistor. The push button is connected to pin 2 with the internal pull-up
+resistor enabled, meaning the pin reads LOW when the button is pressed.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{./img/circuit_sketch_wokwi.jpg}
+    \caption{Circuit sketched on wokwi}
+    \label{fig:wokwi}
+\end{figure}
+
+Figure \ref{fig:wokwi} details the connections and components that make up the system. This visual
+documentation is crucial for replicating the setup or diagnosing issues, as it clearly shows
+how each component is integrated into the overall design.
+
+\subsection{Flow chart}
+
+The Figure \ref{fig:flow} illustrates the cooperative scheduling flow. The hardware timer
+generates a 1\,ms tick interrupt. On each tick, the scheduler iterates through the task array
+and executes the first task whose counter has reached zero. Task 1 polls the button every 10\,ms,
+Task 2 handles yellow LED blinking every 50\,ms, and Task 3 triggers a report every 10\,seconds.
+The main loop handles printing the report outside the ISR context.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.62\textwidth]{./img/flow.png}
+    \caption{Flow chart of the algorithm}
+    \label{fig:flow}
+\end{figure}
+
+\subsection{Code design}
+
+Code is developed following the principle of separating the interface from the
+implementation, by creating for each header file \texttt{.h} a respective
+\texttt{.cpp} file that implements it. The project is organized into three layers:
+
+\begin{enumerate}
+  \item \textbf{Driver layer} -- contains hardware-specific code for the button
+    (\texttt{button.h/cpp}), LEDs (\texttt{led.h/cpp}), and serial communication
+    (\texttt{serial.h/cpp}). All direct \texttt{Arduino.h} calls are encapsulated here.
+  \item \textbf{Service layer} -- contains the cooperative scheduler
+    (\texttt{scheduler.h/cpp}) which is a reusable, hardware-independent module
+    that manages task contexts and execution timing.
+  \item \textbf{Application layer} -- contains the task logic (\texttt{lab2-1.h/cpp})
+    which defines the three tasks, their recurrence/offset parameters, global shared
+    variables, and the timer ISR that drives the system tick.
+\end{enumerate}
+
+The scheduler uses a \texttt{TaskContext} structure array:
+\begin{lstlisting}
+typedef struct {
+  TaskFunc func;    // pointer to task function
+  int recurrence;   // execution period in ticks
+  int offset;       // initial delay
+  int counter;      // countdown to next execution
+} TaskContext;
+\end{lstlisting}
+
+Tasks communicate through global variables. Task 1 sets \texttt{newPressDetected} and
+\texttt{lastPressDuration} which Task 2 reads. Task 3 snapshots and resets the statistics,
+setting \texttt{reportReady} which the main loop polls to print the report via \texttt{printf()}.
+This design ensures that \texttt{printf()} is never called from within the ISR, avoiding
+potential issues with blocking I/O in interrupt context.

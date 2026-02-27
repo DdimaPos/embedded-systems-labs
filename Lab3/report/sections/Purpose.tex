@@ -1,0 +1,40 @@
+\section{Purpose of laboratory work}
+
+Purpose of the laboratory work is to design and implement a multitasking application for a
+microcontroller that monitors the duration of each button press, signals the press duration
+visually through LEDs, and periodically reports statistics to the user via STDIO.
+
+\subsection{Objectives of the laboratory work}
+
+Laboratory work has the following objectives that should be achieved:
+
+\begin{itemize}
+  \item Understanding the principles of non-preemptive (bare-metal) multitasking on microcontrollers
+  \item Implementing a cooperative scheduler with context structures, recurrence, and offset parameters
+  \item Designing an application structured into distinct tasks with clear responsibilities
+  \item Measuring button press durations and classifying them as short ($<500$ ms) or long ($\geq 500$ ms)
+  \item Providing visual feedback through LEDs and periodic statistical reports through STDIO
+\end{itemize}
+
+\subsection{Problem definition}
+
+The application must be structured in at least 3 distinct tasks:
+
+\begin{enumerate}
+  \item \textbf{Task 1 -- Button detection and press duration measurement:} Monitors the button state,
+    detects pressed/released transitions, and measures the duration of each press in milliseconds.
+    On each valid press, it saves the duration in a global variable and signals visually:
+    \begin{itemize}
+      \item Green LED on for a short press ($< 500$ ms)
+      \item Red LED on for a long press ($\geq 500$ ms)
+    \end{itemize}
+
+  \item \textbf{Task 2 -- Press counting and statistics:} On each detected press, increments a global
+    press counter, updates the total duration sums for short and long presses, and tracks the count
+    of short and long presses. Performs a rapid blink of the yellow LED: 5 blinks for a short press
+    and 10 blinks for a long press.
+
+  \item \textbf{Task 3 -- Periodic reporting:} Every 10 seconds, transmits to the user via STDIO:
+    total number of presses, number of short presses ($< 500$ ms), number of long presses
+    ($\geq 500$ ms), average press duration, and then resets the statistics.
+\end{enumerate}

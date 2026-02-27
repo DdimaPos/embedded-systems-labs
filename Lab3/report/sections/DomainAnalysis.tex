@@ -1,0 +1,68 @@
+\section{Domain Analysis}
+\subsection{Application Context and Utilized Technologies}
+The primary objective of this laboratory work is to implement a \textbf{non-preemptive cooperative
+multitasking system} on a bare-metal microcontroller. This approach is fundamental in embedded
+engineering for building responsive systems without the overhead of a full real-time operating
+system (RTOS).
+
+The application uses a \textbf{tick-based cooperative scheduler} that manages multiple tasks with
+individual recurrence intervals and offsets. Each task is represented by a context structure
+containing a function pointer, recurrence period, offset, and a countdown counter. A hardware
+timer generates a 1\,KHz system tick (1\,ms resolution), and the scheduler executes at most
+one task per tick, ensuring deterministic and non-preemptive behavior.
+
+Communication with the user is achieved through the standard I/O library (\texttt{stdio.h})
+adapted for the microcontroller's UART interface, allowing the use of \texttt{printf()} for
+outputting periodic statistical reports.
+
+\subsection{Hardware and Software Components}
+
+\begin{center}
+\begin{tabular}{| p{4cm} | p{10cm} |}
+\hline
+\textbf{Component} & \textbf{Description \& Role} \\ \hline
+\textbf{LAFVIN R3 (Arduino UNO R3)} & Microcontroller board with ATmega328P that runs the cooperative scheduler and all application tasks. \\ \hline
+\textbf{Push Button} & Input peripheral connected to pin 2 with internal pull-up resistor. Used to detect press/release transitions for duration measurement. \\ \hline
+\textbf{Green LED} & Connected to pin 13 (LED\_BUILTIN). Lights up to indicate a short button press ($< 500$ ms). \\ \hline
+\textbf{Red LED} & Connected to pin 12. Lights up to indicate a long button press ($\geq 500$ ms). \\ \hline
+\textbf{Yellow LED} & Connected to pin 11. Performs rapid blinking to acknowledge each press (5 blinks for short, 10 for long). \\ \hline
+\textbf{$220\,\Omega$ Resistors} & Current limiting resistors for each LED to keep current within safe operating limits. \\ \hline
+\textbf{Serial-to-USB Interface} & Facilitates UART communication between the MCU and the terminal for periodic report output. \\ \hline
+\textbf{Hardware Timer (Timer1)} & Configured at 1\,KHz to generate the system tick interrupt that drives the cooperative scheduler. \\ \hline
+\textbf{Neovim + Arduino-nvim plugin} & Development environment with \texttt{arduino-cli} integration for compilation, upload, and monitoring. \\ \hline
+\textbf{Breadboard} & Prototyping base for interconnecting the button, LEDs, resistors, and the Arduino without soldering. \\ \hline
+\end{tabular}
+\end{center}
+
+\subsection{System Architecture and Solution Justification}
+The system adopts a \textbf{cooperative (non-preemptive) scheduler architecture}. This design was chosen
+because it provides deterministic task execution without the complexity of context switching found
+in preemptive systems. Each task runs to completion before yielding control back to the scheduler,
+which simplifies shared variable access and eliminates the need for mutexes or semaphores.
+
+The scheduler uses an array of \texttt{TaskContext} structures, each containing:
+\begin{itemize}
+    \item \texttt{func} -- pointer to the task function
+    \item \texttt{recurrence} -- how often the task should execute (in ticks)
+    \item \texttt{offset} -- initial delay before first execution
+    \item \texttt{counter} -- countdown to next execution
+\end{itemize}
+
+The data flow is structured as follows:
+\begin{enumerate}
+    \item \textbf{Timer ISR:} Increments the global system tick and calls \texttt{srvSchedulerTick()}.
+    \item \textbf{Scheduler:} Iterates through the task array, decrementing counters. The first task
+      whose counter reaches zero is executed, and only one task runs per tick.
+    \item \textbf{Task Communication:} Tasks communicate through global variables (e.g.,
+      \texttt{newPressDetected}, \texttt{lastPressDuration}, \texttt{reportReady}).
+    \item \textbf{Report Output:} The main loop polls a \texttt{reportReady} flag and prints statistics
+      via \texttt{printf()} outside the ISR context.
+\end{enumerate}
+
+\subsection{Relevant Case Study}
+A real-world application of cooperative multitasking is found in \textbf{industrial sensor monitoring systems},
+where multiple sensors must be polled at different rates without the overhead of a full RTOS. For example,
+in a factory conveyor system, one task may poll proximity sensors every 10\,ms, another task updates
+a status display every 100\,ms, and a third task logs aggregated data every 10\,seconds. The cooperative
+scheduler ensures predictable timing while keeping the firmware simple and deterministic -- properties
+critical for safety-relevant embedded systems.

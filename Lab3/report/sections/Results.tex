@@ -1,0 +1,85 @@
+\subsection{Results}
+
+For running the application following commands were used for compiling,
+uploading the project and monitoring the port to observe the periodic reports.
+
+\begin{verbatim}
+# to find to which port number the board is connected
+arduino-cli board list
+# compilation of the programm by indicating the target hardware
+arduino-cli compile --fqbn arduino:avr:uno sketch
+# uploading the program executables to the board
+arduino-cli upload -p /dev/cu.usbserial-portnumber --fqbn arduino:avr:uno sketch
+# monitoring the port to which the active board is connected
+arduino-cli monitor -p /dev/cu.usbserial-portnumber
+\end{verbatim}
+
+Below is the output of the commands listed above
+
+\begin{verbatim}
+$ arduino-cli compile --fqbn arduino:avr:uno sketch
+Sketch uses 3918 bytes (12%) of program storage space. Maximum is 32256 bytes.
+Global variables use 400 bytes (19%) of dynamic memory, leaving 1648 bytes
+for local variables. Maximum is 2048 bytes.
+
+$ arduino-cli upload -p /dev/cu.usbserial-1120 --fqbn arduino:avr:uno sketch
+New upload port: /dev/cu.usbserial-1120 (serial)
+
+$ arduino-cli monitor -p /dev/cu.usbserial-1120
+Using generic monitor configuration.
+
+Monitor port settings:
+  baudrate=9600
+
+Connecting to /dev/cu.usbserial-1120. Press CTRL-C to exit.
+
+Lab 3.1 - Button Press Monitor
+Reports every 10 seconds
+--- Report ---
+Total presses: 5
+Short (<500ms): 3
+Long  (>=500ms): 2
+Avg duration: 487 ms
+--------------
+--- Report ---
+Total presses: 0
+Short (<500ms): 0
+Long  (>=500ms): 0
+Avg duration: N/A
+--------------
+\end{verbatim}
+
+The system behavior is as follows:
+\begin{itemize}
+  \item When a short press ($< 500$ ms) is detected, the \textbf{green LED} turns on and the
+    red LED turns off. The \textbf{yellow LED} blinks 5 times rapidly.
+  \item When a long press ($\geq 500$ ms) is detected, the \textbf{red LED} turns on and the
+    green LED turns off. The \textbf{yellow LED} blinks 10 times rapidly.
+  \item Every 10 seconds, a statistics report is printed to the serial monitor showing the
+    total number of presses, the count of short and long presses, and the average press duration.
+    After printing, all counters are reset.
+  \item When no presses occur during a reporting interval, the report shows zeros and
+    ``N/A'' for the average duration.
+\end{itemize}
+
+Below there is the visual representation of the circuit
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/ledoff.jpg}
+    \caption{Circuit in idle state}
+    \label{fig:ledoff}
+\end{figure}
+
+Figure \ref{fig:ledoff} shows the circuit in its idle state with all LEDs off.
+
+\clearpage
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/ledon.jpg}
+    \caption{LED active after a button press}
+    \label{fig:ledon}
+\end{figure}
+
+Figure \ref{fig:ledon} shows the circuit after a button press has been detected,
+with the corresponding LED (green or red) active to indicate the press duration category.
