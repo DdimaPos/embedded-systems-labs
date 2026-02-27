@@ -1,0 +1,29 @@
+\section{Conclusion}
+
+Completion of this laboratory work has provided insightful understanding of
+non-preemptive cooperative multitasking on bare-metal microcontroller systems
+and the design principles behind real-time task scheduling.
+
+This third laboratory work covered the implementation of a cooperative scheduler
+with multiple tasks running at different recurrence intervals, communicating
+through shared global variables. The key takeaways are:
+
+\begin{enumerate}
+  \item Designing a \textbf{cooperative scheduler} using context structures with
+    recurrence, offset, and countdown counters -- ensuring only one task executes
+    per system tick for deterministic behavior.
+  \item Implementing \textbf{inter-task communication} through global variables
+    and flags (\texttt{newPressDetected}, \texttt{reportReady}), demonstrating
+    how tasks can exchange data without mutexes in a non-preemptive environment.
+  \item Structuring the application into \textbf{three distinct layers}: driver,
+    service (scheduler), and application -- maintaining portability and modularity.
+  \item Understanding the importance of \textbf{separating ISR-context work from
+    main-loop work}: the timer ISR drives the scheduler, while blocking operations
+    like \texttt{printf()} are deferred to the main loop via a flag.
+  \item Gaining practical experience with \textbf{button debouncing, press duration
+    measurement}, and visual signaling through multiple LEDs at different rates.
+\end{enumerate}
+
+This laboratory work serves as a foundation for understanding operating system
+concepts on embedded systems, bridging the gap between bare-metal sequential
+programming and full RTOS-based multitasking.
