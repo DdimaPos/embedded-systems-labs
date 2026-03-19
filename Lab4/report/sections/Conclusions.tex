@@ -1,0 +1,36 @@
+\section{Conclusion}
+
+Completion of this laboratory work has provided insightful understanding of
+preemptive multitasking with FreeRTOS on the ESP32 microcontroller and the design
+principles behind real-time task synchronization.
+
+This fourth laboratory work covered the port of the bare-metal cooperative application to
+FreeRTOS preemptive tasks, extending it with synchronization mechanisms while preserving
+the same three-layer architecture and task function structure. The key takeaways are:
+
+\begin{enumerate}
+  \item Porting a \textbf{cooperative bare-metal application to FreeRTOS} with minimal
+    changes to task logic -- by encapsulating periodicity and offset entirely inside the
+    scheduler service abstraction (\texttt{periodicTaskRunner} with \texttt{vTaskDelayUntil}),
+    the task functions themselves remain identical in structure to the bare-metal version.
+  \item Using \textbf{\texttt{vTaskDelayUntil}} for drift-corrected periodic execution,
+    which guarantees that each task fires at precise intervals regardless of how long the
+    task body takes to execute -- a significant improvement over relative \texttt{vTaskDelay}.
+  \item Implementing \textbf{inter-task synchronization} with a binary semaphore for
+    event-driven signaling (Task 1 notifies Task 2 on press detection) and a mutex for
+    protecting shared statistical variables against concurrent access by Tasks 1, 2, and 3.
+  \item Understanding the difference between a \textbf{binary semaphore} (used for
+    signaling, no ownership) and a \textbf{mutex} (used for mutual exclusion, with
+    ownership semantics and priority inheritance support in FreeRTOS).
+  \item Structuring the application into \textbf{three distinct layers}: driver, service
+    (scheduler + sync), and application -- maintaining the portability and modularity
+    established in Laboratory Work 3.
+  \item Gaining practical experience with \textbf{safe shared resource access} in a
+    preemptive environment, where failing to protect global variables would lead to
+    race conditions and corrupted statistics.
+\end{enumerate}
+
+This laboratory work builds directly on Laboratory Work 3, demonstrating how the same
+application logic and architecture can be lifted from bare-metal to a full RTOS with
+targeted, minimal changes -- a skill essential for developing scalable and maintainable
+embedded firmware.

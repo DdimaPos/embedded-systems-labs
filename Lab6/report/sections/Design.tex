@@ -1,0 +1,144 @@
+\section{Design}
+
+\subsection{Architectural sketch}
+
+Below is the architectural sketch of the components structured in the diagram that
+highlights the software and hardware components.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\textwidth]{./img/architecturediagram.png}
+    \caption{Architectural sketch of the project}
+    \label{fig:archi}
+\end{figure}
+
+This is the description of each of the elements of the diagram:
+\begin{enumerate}
+  \item \textbf{ESP32 DevKit microcontroller} -- central processing unit running FreeRTOS
+    and executing all three application tasks preemptively
+  \item \textbf{DS18B20 temperature sensor (GPIO\,4)} -- digital sensor communicating over
+    OneWire; read by TaskAcquisition every 100\,ms in non-blocking mode
+  \item \textbf{Green LED (GPIO\,25)} -- output indicator; ON when temperature alert is OFF
+  \item \textbf{Red LED (GPIO\,26)} -- output indicator; ON when temperature alert is active
+  \item \textbf{LCD 16$\times$2 I2C (SDA=21, SCL=22)} -- display updated by TaskReporter
+    every 500\,ms with current temperature and alert state
+  \item \textbf{SensorData module} -- shared data store protected by \texttt{xSensorMutex};
+    holds temperature value, validity flag, alert state, and debounce counter
+  \item \textbf{TaskAcquisition} -- FreeRTOS task (priority 3) that reads the sensor
+    periodically and gives \texttt{xSemNewData}
+  \item \textbf{TaskConditioning} -- FreeRTOS task (priority 2) blocked on
+    \texttt{xSemNewData}; applies hysteresis and debounce, updates LEDs
+  \item \textbf{TaskReporter} -- FreeRTOS task (priority 1) that updates LCD and prints
+    STDIO reports at 500\,ms intervals
+  \item \textbf{GpioDriver (MCAL)} -- wraps all \texttt{digitalRead}/\texttt{digitalWrite}
+    calls; only layer that touches Arduino hardware APIs directly
+\end{enumerate}
+
+\subsection{Electrical sketch}
+
+The circuit diagram outlines the setup for this project, showing the connections between
+the ESP32, two LEDs (green, red), the DS18B20 temperature sensor, the LCD I2C module,
+and the computer for serial communication. Each LED is connected to its respective GPIO
+pin through a $220\,\Omega$ current-limiting resistor. The DS18B20 data line (GPIO\,4)
+requires a $4.7\,\mathrm{k\Omega}$ pull-up resistor to 3.3\,V for reliable OneWire
+communication.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{./img/circuit_sketch_wokwi.jpg}
+    \caption{Circuit sketched on wokwi}
+    \label{fig:wokwi}
+\end{figure}
+
+Figure \ref{fig:wokwi} details the connections and components that make up the system.
+This visual documentation is crucial for replicating the setup or diagnosing issues, as
+it clearly shows how each component is integrated into the overall design.
+
+\subsection{Flow chart}
+
+The Figure \ref{fig:flow} illustrates the FreeRTOS task interaction flow. TaskAcquisition
+runs every 100\,ms, reads the DS18B20, updates shared data under the mutex, and gives the
+binary semaphore. TaskConditioning unblocks immediately, reads the shared temperature,
+applies the \texttt{ProcessChannel} hysteresis + debounce logic, and updates the alert
+state and LEDs. TaskReporter runs every 500\,ms independently and reads shared data to
+refresh the LCD and serial output.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{./img/flow.png}
+    \caption{Flow chart of the algorithm}
+    \label{fig:flow}
+\end{figure}
+
+\clearpage
+\subsection{Code design}
+
+Code is developed following the principle of separating the interface from the
+implementation, by creating for each header file \texttt{.h} a respective \texttt{.cpp}
+file. The project uses \textbf{PlatformIO} with three library directories:
+
+\begin{enumerate}
+  \item \textbf{MCAL layer} (\texttt{lib/MCAL/GpioDriver}) -- hardware-specific code that
+    wraps \texttt{Arduino.h} GPIO calls. All direct hardware access is encapsulated here.
+  \item \textbf{ECAL layer} (\texttt{lib/ECAL/}) -- electronic component drivers:
+    \texttt{TempSensor} (DS18B20 via OneWire + DallasTemperature),
+    \texttt{LedDriver} (two LEDs),
+    \texttt{LcdDisplay} (LiquidCrystal\_I2C), and
+    \texttt{SerialIO} (UART initialization).
+  \item \textbf{SRV layer} (\texttt{lib/SRV/}) -- the \texttt{SensorData} shared-state
+    module and the three FreeRTOS task implementations.
+\end{enumerate}
+
+The \texttt{SensorData} module centralizes all shared data behind mutex-protected
+getters and setters, and owns the FreeRTOS synchronization primitives:
+
+\begin{lstlisting}
+// Declared in SensorData.h, initialized in SensorData_Init()
+extern SemaphoreHandle_t xSemNewData;   // binary semaphore: new data available
+extern SemaphoreHandle_t xSensorMutex; // mutex: protects all shared sensor fields
+\end{lstlisting}
+
+The signal conditioning logic is encapsulated in a single reusable function:
+\begin{lstlisting}
+static AlertState_t ProcessChannel(
+    float value, float threshHigh, float threshLow,
+    AlertState_t currentAlert, uint8_t *debounce)
+{
+    // Hysteresis
+    AlertState_t desired;
+    if      (value >= threshHigh) desired = ALERT_ON;
+    else if (value <= threshLow)  desired = ALERT_OFF;
+    else                          desired = currentAlert; // no change in dead band
+
+    // Debounce: require DEBOUNCE_COUNT consecutive confirmations
+    if (desired != currentAlert) {
+        (*debounce)++;
+        if (*debounce >= DEBOUNCE_COUNT) {
+            *debounce = 0;
+            return desired;  // transition confirmed
+        }
+    } else {
+        *debounce = 0;       // reset counter if condition does not persist
+    }
+    return currentAlert;     // no state change yet
+}
+\end{lstlisting}
+
+TaskReporter uses \texttt{vTaskDelayUntil} for drift-corrected 500\,ms periodicity
+and alternates between a compact CSV line (every cycle) and a full structured report
+(every 5\,seconds, i.e. every 10th cycle):
+\begin{lstlisting}
+// CSV plotter line (every 500 ms)
+printf("%.1f,%.1f,%.1f\n", temp, TEMP_THRESH_HIGH, TEMP_THRESH_LOW);
+
+// Full structured report (every 5 s)
+if ((reportCounter++ % FULL_REPORT_EVERY) == 0) {
+    printf("\n--- SENSOR REPORT (t=%lu ms) ---\n",
+           xTaskGetTickCount() * portTICK_PERIOD_MS);
+    printf("Temp  : %.1f C (valid=%d, alert=%s, dbg=%d)\n",
+           temp, tempOk, (tAlert ? "ON" : "OFF"), tDbg);
+    printf("Thresh: ON >= %.1f C, OFF <= %.1f C\n",
+           TEMP_THRESH_HIGH, TEMP_THRESH_LOW);
+    printf("--------------------------------\n\n");
+}
+\end{lstlisting}

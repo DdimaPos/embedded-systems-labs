@@ -1,0 +1,112 @@
+\section{Domain Analysis}
+\subsection{Application Context and Utilized Technologies}
+
+The primary objective of this laboratory work is to implement a \textbf{binary signal
+acquisition and conditioning system} for a digital temperature sensor using
+\textbf{FreeRTOS} on the ESP32 microcontroller. The application demonstrates a
+complete sensor pipeline: periodic raw data acquisition, hysteresis-based threshold
+detection with debounce filtering, and structured reporting on both an LCD display and
+the serial interface.
+
+The system uses the \textbf{DS18B20} one-wire digital temperature sensor. The sensor
+communicates over the \textbf{OneWire} protocol on a single GPIO pin (GPIO\,4), and is
+read through the \textit{DallasTemperature} library in a non-blocking configuration
+(9-bit resolution, \texttt{setWaitForConversion(false)}). This pattern issues the
+temperature conversion request in one acquisition cycle and retrieves the result in the
+next, avoiding blocking delays inside the FreeRTOS task.
+
+The signal conditioning stage implements two classical digital signal processing
+techniques:
+\begin{itemize}
+  \item \textbf{Hysteresis:} The alert turns \textit{ON} only when the temperature
+    exceeds the upper threshold ($\geq 26\,^\circ$C) and turns \textit{OFF} only when
+    it drops below the lower threshold ($\leq 24\,^\circ$C). While the temperature is
+    between the two thresholds, the alert state remains unchanged. This prevents rapid
+    toggling (chattering) when the signal fluctuates near a single threshold value.
+  \item \textbf{Debounce filter:} A transition is only accepted after the desired new
+    state persists for \texttt{DEBOUNCE\_COUNT} $= 3$ consecutive acquisitions
+    (300\,ms). If the condition is not maintained for the full count, the counter resets
+    and no state change occurs.
+\end{itemize}
+
+Task synchronization is achieved through two FreeRTOS primitives:
+\begin{itemize}
+  \item A \textbf{binary semaphore} (\texttt{xSemNewData}) given by TaskAcquisition
+    after each read and taken by TaskConditioning, ensuring the conditioning logic runs
+    exactly once per new sample
+  \item A \textbf{mutex} (\texttt{xSensorMutex}) protecting all shared sensor data
+    fields against concurrent access by the three tasks
+\end{itemize}
+
+\subsection{Hardware and Software Components}
+
+\begin{center}
+\begin{tabular}{| p{4cm} | p{10cm} |}
+\hline
+\textbf{Component} & \textbf{Description \& Role} \\ \hline
+\textbf{ESP32 DevKit} & Dual-core microcontroller running FreeRTOS. Hosts all three
+  application tasks and provides the OneWire-compatible GPIO and I2C peripherals. \\ \hline
+\textbf{DS18B20} & Digital temperature sensor communicating over OneWire protocol on
+  GPIO\,4. 9-bit resolution ($\approx 0.5\,^\circ$C), non-blocking conversion
+  ($\approx 94$\,ms). \\ \hline
+\textbf{Green LED} & Connected to GPIO\,25. Lights up when temperature is within the
+  normal range (alert OFF). \\ \hline
+\textbf{Red LED} & Connected to GPIO\,26. Lights up when the temperature alert is active
+  (temperature confirmed above $26\,^\circ$C). \\ \hline
+\textbf{LCD 16$\times$2 I2C} & Connected on the I2C bus (SDA=GPIO\,21, SCL=GPIO\,22),
+  address 0x27. Displays real-time temperature and alert state at 500\,ms intervals. \\ \hline
+\textbf{$220\,\Omega$ Resistors} & Current-limiting resistors for each LED. \\ \hline
+\textbf{Serial-to-USB Interface} & UART at 115200 baud for periodic report output and
+  CSV plotter data. \\ \hline
+\textbf{FreeRTOS} & Built into the ESP32 Arduino core. Provides preemptive task
+  scheduling, binary semaphore, and mutex. \\ \hline
+\textbf{PlatformIO} & Build system and IDE integration used for compilation, upload,
+  and serial monitoring. \\ \hline
+\textbf{Breadboard} & Prototyping base for connecting the DS18B20, LEDs, pull-up resistor,
+  and the ESP32 without soldering. \\ \hline
+\end{tabular}
+\end{center}
+
+\subsection{System Architecture and Solution Justification}
+
+The system is organized into three hardware-abstraction layers following the MCAL /
+ECAL / SRV pattern:
+
+\begin{enumerate}
+  \item \textbf{MCAL (Microcontroller Abstraction Layer):} Contains only
+    \texttt{GpioDriver}, which wraps \texttt{pinMode}, \texttt{digitalWrite},
+    \texttt{digitalRead}, and \texttt{analogRead}. All direct register / Arduino
+    hardware calls are isolated here.
+  \item \textbf{ECAL (Electronic Component Abstraction Layer):} Contains component
+    drivers: \texttt{TempSensor} (DS18B20 via OneWire), \texttt{LedDriver},
+    \texttt{LcdDisplay} (LiquidCrystal\_I2C), and \texttt{SerialIO}. Each module
+    depends only on MCAL or its own library and exposes a clean C API.
+  \item \textbf{SRV (Service Layer):} Contains \texttt{SensorData} (shared data store
+    with mutex/semaphore), and the three FreeRTOS task implementations:
+    \texttt{TaskAcquisition}, \texttt{TaskConditioning}, and \texttt{TaskReporter}.
+\end{enumerate}
+
+The data flow proceeds as follows:
+\begin{enumerate}
+  \item \textbf{TaskAcquisition} reads the DS18B20 sensor every 100\,ms, stores the
+    temperature and validity flag in \texttt{SensorData} (under mutex), and gives the
+    \texttt{xSemNewData} binary semaphore.
+  \item \textbf{TaskConditioning} unblocks immediately on the semaphore, reads the
+    latest temperature, applies the \texttt{ProcessChannel} hysteresis + debounce
+    function, updates the alert state in \texttt{SensorData}, and drives the green/red
+    LEDs accordingly.
+  \item \textbf{TaskReporter} runs every 500\,ms via \texttt{vTaskDelayUntil}, reads
+    all shared values under mutex, updates the LCD, emits a CSV line for the serial
+    plotter, and every 5\,seconds prints a full structured report to STDIO.
+\end{enumerate}
+
+\subsection{Relevant Case Study}
+A real-world application of hysteresis-based binary signal conditioning is the
+\textbf{thermostat control system} found in HVAC equipment. A simple single-threshold
+comparator would cause the heating element to switch on and off repeatedly when the
+room temperature hovers at exactly the set point, leading to relay wear and unstable
+temperature. The hysteresis band (e.g., set point $\pm 1\,^\circ$C) ensures the heater
+stays on until the temperature is clearly above the upper threshold and stays off until
+clearly below the lower threshold. The debounce timer further prevents brief thermal
+noise spikes from triggering spurious transitions -- a technique directly reflected in
+the \texttt{DEBOUNCE\_COUNT} parameter of this laboratory work.

@@ -1,0 +1,45 @@
+\appendix
+\section{Source Code}
+
+\subsection{Main Entry Point}
+\lstinputlisting[caption={main.cpp - Application Entry Point}, label={lst:main}]{../src/main.cpp}
+
+\subsection{MCAL Layer}
+\lstinputlisting[caption={GpioDriver.h - GPIO Abstraction Header}, label={lst:gpio-h}]{../lib/MCAL/GpioDriver/GpioDriver.h}
+
+\lstinputlisting[caption={GpioDriver.cpp - GPIO Abstraction Implementation}, label={lst:gpio-cpp}]{../lib/MCAL/GpioDriver/GpioDriver.cpp}
+
+\subsection{ECAL Layer -- Sensors and Peripherals}
+\lstinputlisting[caption={TempSensor.h - DS18B20 Driver Header}, label={lst:temp-h}]{../lib/ECAL/TempSensor/TempSensor.h}
+
+\lstinputlisting[caption={TempSensor.cpp - DS18B20 Driver Implementation}, label={lst:temp-cpp}]{../lib/ECAL/TempSensor/TempSensor.cpp}
+
+\lstinputlisting[caption={LedDriver.h - LED Driver Header}, label={lst:led-h}]{../lib/ECAL/LedDriver/LedDriver.h}
+
+\lstinputlisting[caption={LedDriver.cpp - LED Driver Implementation}, label={lst:led-cpp}]{../lib/ECAL/LedDriver/LedDriver.cpp}
+
+\lstinputlisting[caption={LcdDisplay.h - LCD I2C Driver Header}, label={lst:lcd-h}]{../lib/ECAL/LcdDisplay/LcdDisplay.h}
+
+\lstinputlisting[caption={LcdDisplay.cpp - LCD I2C Driver Implementation}, label={lst:lcd-cpp}]{../lib/ECAL/LcdDisplay/LcdDisplay.cpp}
+
+\lstinputlisting[caption={SerialIO.h - Serial Initialization Header}, label={lst:serial-h}]{../lib/ECAL/SerialIO/SerialIO.h}
+
+\lstinputlisting[caption={SerialIO.cpp - Serial Initialization Implementation}, label={lst:serial-cpp}]{../lib/ECAL/SerialIO/SerialIO.cpp}
+
+\subsection{SRV Layer -- Shared Data}
+\lstinputlisting[caption={SensorData.h - Shared Sensor Data Header}, label={lst:data-h}]{../lib/SRV/SensorData/SensorData.h}
+
+\lstinputlisting[caption={SensorData.cpp - Shared Sensor Data Implementation}, label={lst:data-cpp}]{../lib/SRV/SensorData/SensorData.cpp}
+
+\subsection{SRV Layer -- FreeRTOS Tasks}
+\lstinputlisting[caption={TaskAcquisition.h - Acquisition Task Header}, label={lst:acq-h}]{../lib/SRV/TaskAcquisition/TaskAcquisition.h}
+
+\lstinputlisting[caption={TaskAcquisition.cpp - Acquisition Task Implementation}, label={lst:acq-cpp}]{../lib/SRV/TaskAcquisition/TaskAcquisition.cpp}
+
+\lstinputlisting[caption={TaskConditioning.h - Conditioning Task Header}, label={lst:cond-h}]{../lib/SRV/TaskConditioning/TaskConditioning.h}
+
+\lstinputlisting[caption={TaskConditioning.cpp - Conditioning Task Implementation}, label={lst:cond-cpp}]{../lib/SRV/TaskConditioning/TaskConditioning.cpp}
+
+\lstinputlisting[caption={TaskReporter.h - Reporter Task Header}, label={lst:rep-h}]{../lib/SRV/TaskReporter/TaskReporter.h}
+
+\lstinputlisting[caption={TaskReporter.cpp - Reporter Task Implementation}, label={lst:rep-cpp}]{../lib/SRV/TaskReporter/TaskReporter.cpp}

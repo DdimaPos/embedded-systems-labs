@@ -1,0 +1,753 @@
+================================================================================
+LAB5_BINARYSIGNAL - COMPLETE FILE LISTING & CONTENT
+Repository: https://github.com/dmracovit/SI/tree/main/Lab5_BinarySignal
+================================================================================
+
+================================================================================
+FILE: platformio.ini
+PATH: Lab5_BinarySignal/platformio.ini
+================================================================================
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+monitor_speed = 115200
+monitor_filters = direct
+build_flags = -DCORE_DEBUG_LEVEL=3
+lib_extra_dirs = lib/MCAL, lib/ECAL, lib/SRV
+lib_deps =
+    paulstoffregen/OneWire@^2.3.7
+    milesburton/DallasTemperature@^3.11.0
+    marcoschwartz/LiquidCrystal_I2C@^1.1.4
+
+
+================================================================================
+FILE: main.cpp
+PATH: Lab5_BinarySignal/src/main.cpp
+================================================================================
+#include <Arduino.h>
+#include "SerialIO.h"
+#include "TempSensor.h"
+#include "SoundSensor.h"
+#include "LedDriver.h"
+#include "LcdDisplay.h"
+#include "SensorData.h"
+#include "TaskAcquisition.h"
+#include "TaskConditioning.h"
+#include "TaskReporter.h"
+
+void setup()
+{
+    SerialIoInit();
+    TempSensor_Init();    // DS18B20: 9-bit, non-blocking, waits for first conversion
+    SoundSensor_Init();   // KY-038: ADC on GPIO34
+    LedDriver_Init();
+    LcdDisplay_Init();    // LCD 16x2 I2C (0x27, SDA=21, SCL=22)
+    SensorData_Init();    // creates semaphore and mutex
+
+    printf("\n======================================\n");
+    printf("  Lab 5 - Dual Sensor Monitor (100%%)  \n");
+    printf("======================================\n");
+    printf("Sensor 1  : DS18B20 (digital) GPIO%d\n",  TEMP_SENSOR_PIN);
+    printf("  Thresh  : ON >= %.1fC, OFF <= %.1fC\n",  TEMP_THRESH_HIGH, TEMP_THRESH_LOW);
+    printf("Sensor 2  : KY-038 (analog) GPIO%d\n",    SOUND_SENSOR_PIN);
+    printf("  Thresh  : ON >= %d, OFF <= %d\n",         SOUND_THRESH_HIGH, SOUND_THRESH_LOW);
+    printf("Debounce  : %d x 100ms = %dms\n",           DEBOUNCE_COUNT, DEBOUNCE_COUNT * 100);
+    printf("Display   : LCD 16x2 I2C + Serial\n");
+    printf("======================================\n\n");
+
+    LcdDisplay_PrintAt(0, 0, "Lab5 DualSensor");
+    LcdDisplay_PrintAt(0, 1, "Starting...");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    // Task priorities: Acquisition=3 (highest), Conditioning=2, Reporter=1
+    xTaskCreate(TaskAcquisition_Task,  "Acquisition",  2048, NULL, 3, NULL);
+    xTaskCreate(TaskConditioning_Task, "Conditioning", 2048, NULL, 2, NULL);
+    xTaskCreate(TaskReporter_Task,     "Reporter",     4096, NULL, 1, NULL);
+}
+
+void loop()
+{
+    vTaskDelay(portMAX_DELAY);
+}
+
+
+================================================================================
+MCAL LAYER (Microcontroller Abstraction Layer)
+================================================================================
+
+FILE: GpioDriver.h
+PATH: Lab5_BinarySignal/lib/MCAL/GpioDriver/GpioDriver.h
+================================================================================
+#pragma once
+#include <Arduino.h>
+
+void    GpioDriver_PinMode(uint8_t pin, uint8_t mode);
+void    GpioDriver_Write(uint8_t pin, uint8_t val);
+uint8_t GpioDriver_Read(uint8_t pin);
+void    GpioDriver_Toggle(uint8_t pin);
+int     GpioDriver_AnalogRead(uint8_t pin);
+
+
+================================================================================
+FILE: GpioDriver.cpp
+PATH: Lab5_BinarySignal/lib/MCAL/GpioDriver/GpioDriver.cpp
+================================================================================
+#include "GpioDriver.h"
+
+void GpioDriver_PinMode(uint8_t pin, uint8_t mode)
+{
+    pinMode(pin, mode);
+}
+
+void GpioDriver_Write(uint8_t pin, uint8_t val)
+{
+    digitalWrite(pin, val);
+}
+
+uint8_t GpioDriver_Read(uint8_t pin)
+{
+    return digitalRead(pin);
+}
+
+void GpioDriver_Toggle(uint8_t pin)
+{
+    digitalWrite(pin, !digitalRead(pin));
+}
+
+int GpioDriver_AnalogRead(uint8_t pin)
+{
+    return analogRead(pin);
+}
+
+
+================================================================================
+ECAL LAYER (Electronic Component Abstraction Layer)
+================================================================================
+
+FILE: LcdDisplay.h
+PATH: Lab5_BinarySignal/lib/ECAL/LcdDisplay/LcdDisplay.h
+================================================================================
+#pragma once
+#include <stdint.h>
+
+void LcdDisplay_Init(void);
+void LcdDisplay_Clear(void);
+void LcdDisplay_SetCursor(uint8_t col, uint8_t row);
+void LcdDisplay_Print(const char *str);
+void LcdDisplay_PrintAt(uint8_t col, uint8_t row, const char *str);
+
+
+================================================================================
+FILE: LcdDisplay.cpp
+PATH: Lab5_BinarySignal/lib/ECAL/LcdDisplay/LcdDisplay.cpp
+================================================================================
+#include "LcdDisplay.h"
+#include <LiquidCrystal_I2C.h>
+
+// I2C address 0x27 (or 0x3F); cols=16, rows=2
+// For ESP32: SDA=21, SCL=22
+static LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void LcdDisplay_Init(void)
+{
+    lcd.init();
+    lcd.backlight();
+    lcd.clear();
+}
+
+void LcdDisplay_Clear(void)
+{
+    lcd.clear();
+}
+
+void LcdDisplay_SetCursor(uint8_t col, uint8_t row)
+{
+    lcd.setCursor(col, row);
+}
+
+void LcdDisplay_Print(const char *str)
+{
+    lcd.print(str);
+}
+
+void LcdDisplay_PrintAt(uint8_t col, uint8_t row, const char *str)
+{
+    lcd.setCursor(col, row);
+    lcd.print(str);
+}
+
+
+================================================================================
+FILE: LedDriver.h
+PATH: Lab5_BinarySignal/lib/ECAL/LedDriver/LedDriver.h
+================================================================================
+#pragma once
+
+void LedDriver_Init(void);
+void LedDriver_GreenOn(void);
+void LedDriver_GreenOff(void);
+void LedDriver_RedOn(void);
+void LedDriver_RedOff(void);
+
+
+================================================================================
+FILE: LedDriver.cpp
+PATH: Lab5_BinarySignal/lib/ECAL/LedDriver/LedDriver.cpp
+================================================================================
+#include "LedDriver.h"
+#include "GpioDriver.h"
+
+#define LED_GREEN_PIN  25
+#define LED_RED_PIN    26
+
+void LedDriver_Init(void)
+{
+    GpioDriver_PinMode(LED_GREEN_PIN, OUTPUT);
+    GpioDriver_PinMode(LED_RED_PIN,   OUTPUT);
+    GpioDriver_Write(LED_GREEN_PIN, LOW);
+    GpioDriver_Write(LED_RED_PIN,   LOW);
+}
+
+void LedDriver_GreenOn(void)  { GpioDriver_Write(LED_GREEN_PIN, HIGH); }
+void LedDriver_GreenOff(void) { GpioDriver_Write(LED_GREEN_PIN, LOW);  }
+void LedDriver_RedOn(void)    { GpioDriver_Write(LED_RED_PIN,   HIGH); }
+void LedDriver_RedOff(void)   { GpioDriver_Write(LED_RED_PIN,   LOW);  }
+
+
+================================================================================
+FILE: SerialIO.h
+PATH: Lab5_BinarySignal/lib/ECAL/SerialIO/SerialIO.h
+================================================================================
+#pragma once
+
+#define SERIAL_BAUD 115200
+
+void SerialIoInit(void);
+
+
+================================================================================
+FILE: SerialIO.cpp
+PATH: Lab5_BinarySignal/lib/ECAL/SerialIO/SerialIO.cpp
+================================================================================
+#include "SerialIO.h"
+#include <Arduino.h>
+
+void SerialIoInit(void)
+{
+    Serial.begin(SERIAL_BAUD);
+    delay(2000);
+}
+
+
+================================================================================
+FILE: SoundSensor.h
+PATH: Lab5_BinarySignal/lib/ECAL/SoundSensor/SoundSensor.h
+================================================================================
+#pragma once
+
+#define SOUND_SENSOR_PIN 34
+
+void SoundSensor_Init(void);
+int  SoundSensor_Read(void);
+
+
+================================================================================
+FILE: SoundSensor.cpp
+PATH: Lab5_BinarySignal/lib/ECAL/SoundSensor/SoundSensor.cpp
+================================================================================
+#include "SoundSensor.h"
+#include "GpioDriver.h"
+
+// Number of samples to capture for peak-to-peak amplitude measurement
+#define SAMPLE_COUNT 50
+// Sampling window ~5ms (50 samples at ~100us each)
+
+void SoundSensor_Init(void)
+{
+    // GPIO34 is input-only on ESP32, no need for explicit pinMode
+}
+
+int SoundSensor_Read(void)
+{
+    // Measure peak-to-peak amplitude over a short window.
+    // Louder sounds = larger amplitude.
+    int sampleMin = 4095;
+    int sampleMax = 0;
+
+    for (int i = 0; i < SAMPLE_COUNT; i++) {
+        int val = GpioDriver_AnalogRead(SOUND_SENSOR_PIN);
+        if (val > sampleMax) sampleMax = val;
+        if (val < sampleMin) sampleMin = val;
+    }
+
+    // Return peak-to-peak amplitude (0 = silence, higher = louder)
+    return sampleMax - sampleMin;
+}
+
+
+================================================================================
+FILE: TempSensor.h
+PATH: Lab5_BinarySignal/lib/ECAL/TempSensor/TempSensor.h
+================================================================================
+#pragma once
+
+#define TEMP_SENSOR_PIN 4
+
+void  TempSensor_Init(void);
+float TempSensor_Read(void);
+int   TempSensor_IsValid(void);
+
+
+================================================================================
+FILE: TempSensor.cpp
+PATH: Lab5_BinarySignal/lib/ECAL/TempSensor/TempSensor.cpp
+================================================================================
+#include "TempSensor.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+static OneWire           oneWire(TEMP_SENSOR_PIN);
+static DallasTemperature sensors(&oneWire);
+static float             lastTemp = 20.0f;
+static int               lastValid = 0;
+
+void TempSensor_Init(void)
+{
+    sensors.begin();
+    sensors.setResolution(9);         // 9-bit: ~94ms conversion
+    sensors.setWaitForConversion(false);  // non-blocking
+    sensors.requestTemperatures();    // start first conversion
+    delay(100);
+}
+
+float TempSensor_Read(void)
+{
+    // Non-blocking pattern: get previous result, request next
+    float temp = sensors.getTempCByIndex(0);
+    lastValid = (temp != DEVICE_DISCONNECTED_C) ? 1 : 0;
+    if (lastValid) {
+        lastTemp = temp;
+    }
+    sensors.requestTemperatures();  // queue next read
+    return lastTemp;
+}
+
+int TempSensor_IsValid(void)
+{
+    return lastValid;
+}
+
+
+================================================================================
+SRV LAYER (Service Layer)
+================================================================================
+
+FILE: SensorData.h
+PATH: Lab5_BinarySignal/lib/SRV/SensorData/SensorData.h
+================================================================================
+#pragma once
+#include <stdint.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+// Thresholds
+#define TEMP_THRESH_HIGH   26.0f
+#define TEMP_THRESH_LOW    24.0f
+
+#define SOUND_THRESH_HIGH  200
+#define SOUND_THRESH_LOW   100
+
+#define DEBOUNCE_COUNT     3   // 3 x 100ms = 300ms debounce
+
+// Alert state enum
+typedef enum {
+    ALERT_OFF = 0,
+    ALERT_ON  = 1
+} AlertState_t;
+
+// Synchronization primitives (declared here, initialized in SensorData.cpp)
+extern SemaphoreHandle_t xSemNewData;
+extern SemaphoreHandle_t xSensorMutex;
+
+// Initialization
+void SensorData_Init(void);
+
+// Temperature getters/setters
+void  SensorData_SetTemperature(float val);
+float SensorData_GetTemperature(void);
+void  SensorData_SetTempValid(int valid);
+int   SensorData_IsTempValid(void);
+void  SensorData_SetTempAlert(AlertState_t alert);
+AlertState_t SensorData_GetTempAlert(void);
+void  SensorData_SetTempDebounce(uint8_t val);
+uint8_t SensorData_GetTempDebounce(void);
+
+// Sound getters/setters
+void  SensorData_SetSoundLevel(int val);
+int   SensorData_GetSoundLevel(void);
+void  SensorData_SetSoundAlert(AlertState_t alert);
+AlertState_t SensorData_GetSoundAlert(void);
+void  SensorData_SetSoundDebounce(uint8_t val);
+uint8_t SensorData_GetSoundDebounce(void);
+
+
+================================================================================
+FILE: SensorData.cpp
+PATH: Lab5_BinarySignal/lib/SRV/SensorData/SensorData.cpp
+================================================================================
+#include "SensorData.h"
+
+// Synchronization primitives
+SemaphoreHandle_t xSemNewData  = NULL;
+SemaphoreHandle_t xSensorMutex = NULL;
+
+// Temperature data
+static float        gTemperature = 20.0f;
+static int          gTempValid = 0;
+static AlertState_t gTempAlert = ALERT_OFF;
+static uint8_t      gTempDebounce = 0;
+
+// Sound data
+static int          gSoundLevel = 0;
+static AlertState_t gSoundAlert = ALERT_OFF;
+static uint8_t      gSoundDebounce = 0;
+
+void SensorData_Init(void)
+{
+    xSemNewData  = xSemaphoreCreateBinary();
+    xSensorMutex = xSemaphoreCreateMutex();
+}
+
+// ===== Temperature =====
+void SensorData_SetTemperature(float val)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    gTemperature = val;
+    xSemaphoreGive(xSensorMutex);
+}
+
+float SensorData_GetTemperature(void)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    float val = gTemperature;
+    xSemaphoreGive(xSensorMutex);
+    return val;
+}
+
+void SensorData_SetTempValid(int valid)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    gTempValid = valid;
+    xSemaphoreGive(xSensorMutex);
+}
+
+int SensorData_IsTempValid(void)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    int val = gTempValid;
+    xSemaphoreGive(xSensorMutex);
+    return val;
+}
+
+void SensorData_SetTempAlert(AlertState_t alert)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    gTempAlert = alert;
+    xSemaphoreGive(xSensorMutex);
+}
+
+AlertState_t SensorData_GetTempAlert(void)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    AlertState_t val = gTempAlert;
+    xSemaphoreGive(xSensorMutex);
+    return val;
+}
+
+void SensorData_SetTempDebounce(uint8_t val)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    gTempDebounce = val;
+    xSemaphoreGive(xSensorMutex);
+}
+
+uint8_t SensorData_GetTempDebounce(void)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    uint8_t val = gTempDebounce;
+    xSemaphoreGive(xSensorMutex);
+    return val;
+}
+
+// ===== Sound =====
+void SensorData_SetSoundLevel(int val)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    gSoundLevel = val;
+    xSemaphoreGive(xSensorMutex);
+}
+
+int SensorData_GetSoundLevel(void)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    int val = gSoundLevel;
+    xSemaphoreGive(xSensorMutex);
+    return val;
+}
+
+void SensorData_SetSoundAlert(AlertState_t alert)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    gSoundAlert = alert;
+    xSemaphoreGive(xSensorMutex);
+}
+
+AlertState_t SensorData_GetSoundAlert(void)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    AlertState_t val = gSoundAlert;
+    xSemaphoreGive(xSensorMutex);
+    return val;
+}
+
+void SensorData_SetSoundDebounce(uint8_t val)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    gSoundDebounce = val;
+    xSemaphoreGive(xSensorMutex);
+}
+
+uint8_t SensorData_GetSoundDebounce(void)
+{
+    xSemaphoreTake(xSensorMutex, portMAX_DELAY);
+    uint8_t val = gSoundDebounce;
+    xSemaphoreGive(xSensorMutex);
+    return val;
+}
+
+
+================================================================================
+FILE: TaskAcquisition.h
+PATH: Lab5_BinarySignal/lib/SRV/TaskAcquisition/TaskAcquisition.h
+================================================================================
+#pragma once
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+void TaskAcquisition_Task(void *pvParameters);
+
+
+================================================================================
+FILE: TaskAcquisition.cpp
+PATH: Lab5_BinarySignal/lib/SRV/TaskAcquisition/TaskAcquisition.cpp
+================================================================================
+#include "TaskAcquisition.h"
+#include "TempSensor.h"
+#include "SoundSensor.h"
+#include "SensorData.h"
+
+#define ACQUISITION_PERIOD_MS 100  // Matches DS18B20 ~94ms conversion
+
+void TaskAcquisition_Task(void *pvParameters)
+{
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    for (;;) {
+        // Read temperature (digital sensor)
+        float temp = TempSensor_Read();
+        SensorData_SetTemperature(temp);
+        SensorData_SetTempValid(TempSensor_IsValid());
+
+        // Read sound (analog sensor)
+        int sound = SoundSensor_Read();
+        SensorData_SetSoundLevel(sound);
+
+        // Signal conditioning task that new data is available
+        xSemaphoreGive(xSemNewData);
+
+        // Maintain periodic execution
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(ACQUISITION_PERIOD_MS));
+    }
+}
+
+
+================================================================================
+FILE: TaskConditioning.h
+PATH: Lab5_BinarySignal/lib/SRV/TaskConditioning/TaskConditioning.h
+================================================================================
+#pragma once
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+void TaskConditioning_Task(void *pvParameters);
+
+
+================================================================================
+FILE: TaskConditioning.cpp
+PATH: Lab5_BinarySignal/lib/SRV/TaskConditioning/TaskConditioning.cpp
+================================================================================
+#include "TaskConditioning.h"
+#include "SensorData.h"
+#include "LedDriver.h"
+
+// Conditioning is semaphore-driven: runs immediately when Acquisition signals new data.
+
+// Helper: apply hysteresis + debounce for one sensor channel.
+// Returns the confirmed alert state after processing.
+static AlertState_t ProcessChannel(
+    float value, float threshHigh, float threshLow,
+    AlertState_t currentAlert, uint8_t *debounce)
+{
+    // --- Hysteresis ---
+    AlertState_t desired;
+    if      (value >= threshHigh) desired = ALERT_ON;
+    else if (value <= threshLow)  desired = ALERT_OFF;
+    else                          desired = currentAlert;
+
+    // --- Debounce ---
+    if (desired != currentAlert) {
+        (*debounce)++;
+        if (*debounce >= DEBOUNCE_COUNT) {
+            *debounce = 0;
+            return desired;  // transition confirmed
+        }
+    } else {
+        *debounce = 0;
+    }
+    return currentAlert;  // no change yet
+}
+
+void TaskConditioning_Task(void *pvParameters)
+{
+    for (;;) {
+        // Block until Acquisition signals new data (timeout = 200ms as watchdog)
+        if (xSemaphoreTake(xSemNewData, pdMS_TO_TICKS(200)) != pdTRUE) {
+            continue;
+        }
+
+        // ===== Temperature channel (digital) =====
+        if (SensorData_IsTempValid()) {
+            float        temp    = SensorData_GetTemperature();
+            AlertState_t tAlert  = SensorData_GetTempAlert();
+            uint8_t      tDbg    = SensorData_GetTempDebounce();
+
+            AlertState_t newTAlert = ProcessChannel(
+                temp, TEMP_THRESH_HIGH, TEMP_THRESH_LOW, tAlert, &tDbg);
+
+            SensorData_SetTempDebounce(tDbg);
+            if (newTAlert != tAlert) {
+                SensorData_SetTempAlert(newTAlert);
+            }
+        }
+
+        // ===== Sound channel (analog) =====
+        {
+            int          snd     = SensorData_GetSoundLevel();
+            AlertState_t sAlert  = SensorData_GetSoundAlert();
+            uint8_t      sDbg    = SensorData_GetSoundDebounce();
+
+            AlertState_t newSAlert = ProcessChannel(
+                (float)snd, (float)SOUND_THRESH_HIGH, (float)SOUND_THRESH_LOW,
+                sAlert, &sDbg);
+
+            SensorData_SetSoundDebounce(sDbg);
+            if (newSAlert != sAlert) {
+                SensorData_SetSoundAlert(newSAlert);
+            }
+        }
+
+        // ===== Apply LEDs =====
+        // Green = both sensors OK, Red = any sensor in alert
+        AlertState_t ta = SensorData_GetTempAlert();
+        AlertState_t sa = SensorData_GetSoundAlert();
+
+        if (ta == ALERT_ON || sa == ALERT_ON) {
+            LedDriver_GreenOff();
+            LedDriver_RedOn();
+        } else {
+            LedDriver_RedOff();
+            LedDriver_GreenOn();
+        }
+    }
+}
+
+
+================================================================================
+FILE: TaskReporter.h
+PATH: Lab5_BinarySignal/lib/SRV/TaskReporter/TaskReporter.h
+================================================================================
+#pragma once
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+void TaskReporter_Task(void *pvParameters);
+
+
+================================================================================
+FILE: TaskReporter.cpp
+PATH: Lab5_BinarySignal/lib/SRV/TaskReporter/TaskReporter.cpp
+================================================================================
+#include "TaskReporter.h"
+#include "SensorData.h"
+#include "LcdDisplay.h"
+#include <stdio.h>
+
+#define REPORTER_PERIOD_MS  500
+#define FULL_REPORT_EVERY   10  // 10 x 500ms = 5 sec
+
+void TaskReporter_Task(void *pvParameters)
+{
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    uint32_t reportCounter = 0;
+
+    for (;;) {
+        // Get current sensor states (protected by mutex)
+        float        temp   = SensorData_GetTemperature();
+        int          tempOk = SensorData_IsTempValid();
+        AlertState_t tAlert = SensorData_GetTempAlert();
+        uint8_t      tDbg   = SensorData_GetTempDebounce();
+
+        int          sound  = SensorData_GetSoundLevel();
+        AlertState_t sAlert = SensorData_GetSoundAlert();
+        uint8_t      sDbg   = SensorData_GetSoundDebounce();
+
+        // ===== LCD Display =====
+        char line1[17], line2[17];
+        if (tempOk) {
+            snprintf(line1, sizeof(line1), "T:%.1fC S:%3d", temp, sound);
+        } else {
+            snprintf(line1, sizeof(line1), "T:ERR  S:%3d", sound);
+        }
+        snprintf(line2, sizeof(line2), "T:%s S:%s",
+                 (tAlert == ALERT_ON) ? "ALRT" : "OK  ",
+                 (sAlert == ALERT_ON) ? "ALRT" : "OK  ");
+
+        LcdDisplay_PrintAt(0, 0, line1);
+        LcdDisplay_PrintAt(0, 1, line2);
+
+        // ===== Serial Output =====
+        // Plotter format (every cycle)
+        printf("%0.1f,%d,%d,%d,%d,%d\n",
+               temp, sound,
+               (int)TEMP_THRESH_HIGH, (int)TEMP_THRESH_LOW,
+               SOUND_THRESH_HIGH, SOUND_THRESH_LOW);
+
+        // Structured report (every 5 seconds)
+        if ((reportCounter++ % FULL_REPORT_EVERY) == 0) {
+            printf("\n--- SENSOR REPORT (t=%lu ms) ---\n",
+                   xTaskGetTickCount() * portTICK_PERIOD_MS);
+            printf("Temp  : %.1fC (valid=%d, alert=%s, dbg=%d)\n",
+                   temp, tempOk, (tAlert ? "ON" : "OFF"), tDbg);
+            printf("Sound : %d (alert=%s, dbg=%d)\n",
+                   sound, (sAlert ? "ON" : "OFF"), sDbg);
+            printf("------------------------------\n\n");
+        }
+
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(REPORTER_PERIOD_MS));
+    }
+}
+
+================================================================================
+END OF FILE LISTING
+================================================================================

@@ -1,0 +1,97 @@
+\section{Domain Analysis}
+\subsection{Application Context and Utilized Technologies}
+The primary objective of this laboratory work is to implement a \textbf{preemptive multitasking
+system} using \textbf{FreeRTOS} on the ESP32 microcontroller. This approach extends the bare-metal
+cooperative scheduler from Laboratory Work 3 by introducing a real-time operating system that
+provides true preemptive scheduling, inter-task synchronization primitives, and drift-corrected
+periodic execution.
+
+The application uses FreeRTOS \textbf{preemptive tasks} managed by the RTOS kernel scheduler.
+Each task runs as an independent execution context with its own stack. Periodic execution is
+achieved through \texttt{vTaskDelayUntil}, which provides precise, drift-corrected intervals.
+An initial \texttt{vTaskDelay} is used to apply the startup offset before the periodic loop begins,
+mirroring the offset field of the bare-metal \texttt{TaskContext} structure.
+
+Task synchronization is achieved through two FreeRTOS primitives:
+\begin{itemize}
+  \item A \textbf{binary semaphore} used by Task 1 to signal Task 2 when a new press event occurs
+  \item A \textbf{mutex} used by Tasks 1, 2, and 3 to protect shared statistical variables from
+    concurrent access
+\end{itemize}
+
+Communication with the user is achieved through the standard \texttt{printf()} function, which on
+ESP32 is natively routed to the UART interface without requiring the \texttt{fdevopen} redirection
+needed on AVR.
+
+\subsection{Hardware and Software Components}
+
+\begin{center}
+\begin{tabular}{| p{4cm} | p{10cm} |}
+\hline
+\textbf{Component} & \textbf{Description \& Role} \\ \hline
+\textbf{ESP32 DevKit} & Dual-core microcontroller board with Xtensa LX6 that runs FreeRTOS and
+  all application tasks preemptively. \\ \hline
+\textbf{Push Button} & Input peripheral connected to GPIO\,15 with internal pull-up resistor.
+  Used to detect press/release transitions for duration measurement. \\ \hline
+\textbf{Green LED} & Connected to GPIO\,13. Lights up to indicate a short button press ($< 500$ ms). \\ \hline
+\textbf{Red LED} & Connected to GPIO\,26. Lights up to indicate a long button press ($\geq 500$ ms). \\ \hline
+\textbf{Yellow LED} & Connected to GPIO\,32. Performs rapid blinking to acknowledge each press
+  (5 blinks for short, 10 for long). \\ \hline
+\textbf{$220\,\Omega$ Resistors} & Current limiting resistors for each LED to keep current within
+  safe operating limits. \\ \hline
+\textbf{Serial-to-USB Interface} & Facilitates UART communication between the MCU and the terminal
+  for periodic report output at 115200 baud. \\ \hline
+\textbf{FreeRTOS} & Real-time operating system built into the ESP32 Arduino core. Provides
+  preemptive task scheduling, binary semaphores, and mutexes. \\ \hline
+\textbf{Neovim + Arduino-nvim plugin} & Development environment with \texttt{arduino-cli} integration
+  for compilation, upload, and monitoring. \\ \hline
+\textbf{Breadboard} & Prototyping base for interconnecting the button, LEDs, resistors, and the
+  ESP32 without soldering. \\ \hline
+\end{tabular}
+\end{center}
+
+\subsection{System Architecture and Solution Justification}
+The system adopts a \textbf{preemptive FreeRTOS scheduler architecture}. Unlike the cooperative
+bare-metal design from Laboratory Work 3, FreeRTOS can interrupt any running task when a higher-priority
+task becomes ready, making the system more responsive and realistic for concurrent embedded applications.
+
+The key architectural insight is that the \textbf{task functions themselves remain unchanged} -- they
+are still plain, one-shot functions with no internal loops. The periodicity and offset logic is
+encapsulated entirely inside the scheduler service, which wraps each task function in a FreeRTOS
+\texttt{periodicTaskRunner}:
+
+\begin{lstlisting}
+static void periodicTaskRunner(void *pvParameters) {
+  TaskWrapper *ctx = (TaskWrapper *)pvParameters;
+  vTaskDelay(pdMS_TO_TICKS(ctx->offsetMs));        // apply offset once
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  for (;;) {
+    ctx->func();                                     // call plain task function
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(ctx->periodMs));
+  }
+}
+\end{lstlisting}
+
+This design minimizes changes between the bare-metal and FreeRTOS versions, satisfying the
+portability requirement of the laboratory work.
+
+The data flow is structured as follows:
+\begin{enumerate}
+  \item \textbf{FreeRTOS Scheduler:} Preemptively runs Task 1 every 10\,ms, Task 2 every 50\,ms,
+    and Task 3 every 10\,seconds based on their configured periods and priorities.
+  \item \textbf{Task 1:} Detects button transitions, writes shared press data under mutex, lights
+    the appropriate LED, and gives the binary semaphore.
+  \item \textbf{Task 2:} Non-blockingly checks the semaphore. If taken, reads press data under mutex,
+    updates statistics under mutex, and drives the yellow LED blink sequence.
+  \item \textbf{Task 3:} Acquires the mutex to atomically snapshot and reset all counters, then prints
+    the report via \texttt{printf()}.
+\end{enumerate}
+
+\subsection{Relevant Case Study}
+A real-world application of preemptive multitasking with synchronization is found in
+\textbf{industrial sensor monitoring systems} with safety requirements. Unlike cooperative systems,
+preemptive scheduling ensures that high-priority tasks (e.g., emergency stop detection) can
+immediately interrupt lower-priority tasks. FreeRTOS mutexes prevent data corruption when multiple
+tasks share sensor readings or counters -- a critical requirement in IEC\,61508-compliant safety
+systems. The binary semaphore pattern used here (producer signals consumer without busy-waiting)
+is a standard technique in event-driven embedded firmware.

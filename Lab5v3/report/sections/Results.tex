@@ -1,0 +1,76 @@
+\section{Results}
+
+For running the application the following commands were used for compiling,
+uploading the project and monitoring the port to observe the periodic reports.
+
+\begin{verbatim}
+# list connected boards and their ports
+pio device list
+# compile and upload to ESP32
+pio run --target upload
+# open serial monitor at 115200 baud
+pio device monitor --baud 115200
+\end{verbatim}
+
+Below is the output of the commands listed above
+
+\begin{verbatim}
+======================================
+  Lab 5 - Temperature Monitor
+======================================
+Sensor    : DS18B20 (digital) GPIO4
+Thresh    : ON >= 26.0C, OFF <= 24.0C
+Debounce  : 3 x 100ms = 300ms
+Display   : LCD 16x2 I2C + Serial
+======================================
+
+23.5,26.0,24.0
+23.6,26.0,24.0
+23.7,26.0,24.0
+
+--- SENSOR REPORT (t=500 ms) ---
+Temp  : 23.5 C (valid=1, alert=OFF, dbg=0)
+Thresh: ON >= 26.0 C, OFF <= 24.0 C
+--------------------------------
+
+26.1,26.0,24.0
+26.2,26.0,24.0
+26.3,26.0,24.0
+
+--- SENSOR REPORT (t=5500 ms) ---
+Temp  : 26.3 C (valid=1, alert=ON, dbg=0)
+Thresh: ON >= 26.0 C, OFF <= 24.0 C
+--------------------------------
+\end{verbatim}
+
+The system behavior is as follows:
+\begin{itemize}
+  \item At startup, the LCD shows \texttt{Lab5 TempMonitor} / \texttt{Starting...}
+    for 1\,second while all modules initialize.
+  \item During normal operation (temperature below $26\,^\circ$C), the \textbf{green LED}
+    is on and the LCD line 1 shows the current temperature (e.g.\ \texttt{Temp: 23.5 C})
+    while line 2 shows \texttt{Alert: OFF}.
+  \item When the temperature rises above $26\,^\circ$C and the condition is confirmed for
+    3 consecutive 100\,ms samples, the alert transitions to ON: the \textbf{red LED}
+    turns on, the green LED turns off, and the LCD line 2 switches to \texttt{Alert: ON}.
+  \item The alert turns OFF only after the temperature drops below $24\,^\circ$C and the
+    lower condition is likewise confirmed for 3 consecutive samples, preventing chattering
+    in the $24$--$26\,^\circ$C dead band.
+  \item Every 500\,ms, a CSV line is emitted to STDIO in the format
+    \texttt{temp,threshHigh,threshLow} for use with a serial plotter.
+  \item Every 5\,seconds, a full structured report is printed showing the temperature
+    value, sensor validity, current alert state, debounce counter, and threshold
+    configuration.
+\end{itemize}
+
+Below is the visual representation of the circuit
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/ledoff.jpg}
+    \caption{Circuit in idle state}
+    \label{fig:ledoff}
+\end{figure}
+
+Figure \ref{fig:ledoff} shows the circuit in its idle state with both LEDs off before
+acquisition begins.

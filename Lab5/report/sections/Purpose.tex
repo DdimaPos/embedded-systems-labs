@@ -1,0 +1,51 @@
+\section{Purpose of laboratory work}
+
+Purpose of the laboratory work is to port the non-preemptive bare-metal multitasking
+application from Laboratory Work 3 to a preemptive FreeRTOS-based system running on the
+ESP32 microcontroller, with minimal changes to the task logic, while extending it with
+synchronization mechanisms for safe inter-task communication.
+
+\subsection{Objectives of the laboratory work}
+
+Laboratory work has the following objectives that should be achieved:
+
+\begin{itemize}
+  \item Porting the bare-metal cooperative application to FreeRTOS preemptive multitasking
+    with minimal modifications to the task functions themselves
+  \item Using \texttt{vTaskDelay} and \texttt{vTaskDelayUntil} for task recurrence and offset,
+    replacing the hardware timer ISR and tick counter
+  \item Extending the scheduler abstraction to create and manage FreeRTOS tasks transparently,
+    keeping task functions as plain one-shot functions identical in structure to the bare-metal version
+  \item Implementing inter-task synchronization using a \textbf{binary semaphore} for event
+    signaling between tasks and a \textbf{mutex} for protecting shared variables
+  \item Demonstrating safe access to shared global resources under concurrent preemptive execution
+  \item Measuring button press durations and classifying them as short ($<500$\,ms) or long
+    ($\geq 500$\,ms), preserving the same application behavior as in the bare-metal version
+  \item Providing visual feedback through LEDs and periodic statistical reports through STDIO
+\end{itemize}
+
+\subsection{Problem definition}
+
+The application must be structured in at least 3 distinct tasks:
+
+\begin{enumerate}
+  \item \textbf{Task 1 -- Button detection and press duration measurement:} Monitors the button state,
+    detects pressed/released transitions, and measures the duration of each press in milliseconds.
+    On each valid press, it saves the duration in a global variable (protected by mutex) and signals
+    visually:
+    \begin{itemize}
+      \item Green LED on for a short press ($< 500$ ms)
+      \item Red LED on for a long press ($\geq 500$ ms)
+    \end{itemize}
+    After updating the shared data, it gives a binary semaphore to signal Task 2.
+
+  \item \textbf{Task 2 -- Press counting and statistics:} On each tick, non-blockingly checks
+    the binary semaphore. If a new press was signaled, reads shared press data under mutex,
+    increments counters under mutex, and performs a rapid blink of the yellow LED: 5 blinks
+    for a short press and 10 blinks for a long press.
+
+  \item \textbf{Task 3 -- Periodic reporting:} Every 10 seconds, acquires the mutex to snapshot
+    and atomically reset all statistics counters, then transmits via STDIO: total number of presses,
+    number of short presses ($< 500$ ms), number of long presses ($\geq 500$ ms), and average
+    press duration.
+\end{enumerate}
