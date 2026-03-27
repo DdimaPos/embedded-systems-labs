@@ -35,7 +35,7 @@ void TaskReporter_Task(void *pvParameters) {
     OledDisplay_Clear();
     OledDisplay_SetTextSize(1);
 
-    OledDisplay_PrintAt(0, 0, "-- Temp Monitor --");
+    OledDisplay_PrintAt(10, 0, "-- Temp Monitor --");
 
     snprintf(buf, sizeof(buf), "Sensor: %s", SensorName(sensor));
     OledDisplay_PrintAt(0, 10, buf);

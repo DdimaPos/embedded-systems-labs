@@ -16,61 +16,84 @@ Below is the output of the commands listed above
 
 \begin{verbatim}
 ======================================
-  Lab 5 - Temperature Monitor
+  Lab 6 - Analog Signal Acquisition
 ======================================
-Sensor    : DS18B20 (digital) GPIO4
-Thresh    : ON >= 26.0C, OFF <= 24.0C
-Debounce  : 3 x 100ms = 300ms
-Display   : LCD 16x2 I2C + Serial
+Sensor    : DHT11 (digital) GPIO4
+Acq.period: 2000 ms
+Pipeline  : Saturation -> Median(5) -> EMA(a=0.20)
+Thresholds: ON >= 28.0C, OFF <= 24.0C
+Display   : OLED 128x64 SSD1306 + LCD 20x4 + Serial
 ======================================
 
-23.5,26.0,24.0
-23.6,26.0,24.0
-23.7,26.0,24.0
+>raw:24.00,median:24.00,ema:24.00,thresh_high:28.0,thresh_low:24.0
+>raw:24.00,median:24.00,ema:24.00,thresh_high:28.0,thresh_low:24.0
+>raw:25.00,median:24.00,ema:24.00,thresh_high:28.0,thresh_low:24.0
 
---- SENSOR REPORT (t=500 ms) ---
-Temp  : 23.5 C (valid=1, alert=OFF, dbg=0)
-Thresh: ON >= 26.0 C, OFF <= 24.0 C
---------------------------------
+===== SENSOR REPORT (t=5000 ms) =====
+Active sensor : DHT11
+Validity      : OK
+Raw           : 25.00 C
+Saturated+Med : 24.00 C  (median window=5)
+EMA averaged  : 24.00 C  (alpha=0.20)
+Alert         : OFF  (thresholds: ON>=28.0 OFF<=24.0)
+====================================
 
-26.1,26.0,24.0
-26.2,26.0,24.0
-26.3,26.0,24.0
+>raw:29.00,median:25.00,ema:24.20,thresh_high:28.0,thresh_low:24.0
+>raw:30.00,median:29.00,ema:25.16,thresh_high:28.0,thresh_low:24.0
+>raw:30.00,median:30.00,ema:26.13,thresh_high:28.0,thresh_low:24.0
 
---- SENSOR REPORT (t=5500 ms) ---
-Temp  : 26.3 C (valid=1, alert=ON, dbg=0)
-Thresh: ON >= 26.0 C, OFF <= 24.0 C
---------------------------------
+===== SENSOR REPORT (t=10000 ms) =====
+Active sensor : DHT11
+Validity      : OK
+Raw           : 30.00 C
+Saturated+Med : 30.00 C  (median window=5)
+EMA averaged  : 27.10 C  (alpha=0.20)
+Alert         : ON  (thresholds: ON>=28.0 OFF<=24.0)
+====================================
 \end{verbatim}
 
 The system behavior is as follows:
 \begin{itemize}
-  \item At startup, the LCD shows \texttt{Lab5 TempMonitor} / \texttt{Starting...}
+  \item At startup, the OLED shows \texttt{Lab6 SigAcquire} / \texttt{Starting...}
     for 1\,second while all modules initialize.
-  \item During normal operation (temperature below $26\,^\circ$C), the \textbf{green LED}
-    is on and the LCD line 1 shows the current temperature (e.g.\ \texttt{Temp: 23.5 C})
-    while line 2 shows \texttt{Alert: OFF}.
-  \item When the temperature rises above $26\,^\circ$C and the condition is confirmed for
-    3 consecutive 100\,ms samples, the alert transitions to ON: the \textbf{red LED}
-    turns on, the green LED turns off, and the LCD line 2 switches to \texttt{Alert: ON}.
-  \item The alert turns OFF only after the temperature drops below $24\,^\circ$C and the
-    lower condition is likewise confirmed for 3 consecutive samples, preventing chattering
-    in the $24$--$26\,^\circ$C dead band.
-  \item Every 500\,ms, a CSV line is emitted to STDIO in the format
-    \texttt{temp,threshHigh,threshLow} for use with a serial plotter.
-  \item Every 5\,seconds, a full structured report is printed showing the temperature
-    value, sensor validity, current alert state, debounce counter, and threshold
-    configuration.
+  \item During normal operation (temperature below $28\,^\circ$C), the \textbf{green LED}
+    is on and the OLED displays all pipeline stages: raw temperature, median-filtered
+    value, and EMA-averaged value, along with the sensor name and alert state.
+  \item The serial plotter line in \texttt{>name:value} format allows real-time
+    visualization in the VS Code Serial Plotter extension, where the raw, median, and
+    EMA traces can be compared side by side against the threshold reference lines.
+  \item When the temperature rises above $28\,^\circ$C (as seen by the median-filtered
+    value), the alert transitions to ON: the \textbf{red LED} turns on, the green LED
+    turns off, and the OLED display updates to show \texttt{Alert: ON}.
+  \item The alert turns OFF only after the median-filtered temperature drops below
+    $24\,^\circ$C, preventing chattering in the $24$--$28\,^\circ$C hysteresis band.
+  \item The EMA trace on the serial plotter visibly lags behind the raw and median
+    traces, demonstrating the smoothing effect of the weighted average with
+    $\alpha = 0.2$.
+  \item Every 500\,ms, a serial plotter data line is emitted. Every 5\,seconds, a full
+    structured report is printed showing the active sensor, validity, all pipeline
+    values with their parameters, and alert configuration.
 \end{itemize}
 
+\clearpage
 Below is the visual representation of the circuit
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.6\textwidth]{img/ledoff.jpg}
-    \caption{Circuit in idle state}
+    \caption{Circuit in working state}
     \label{fig:ledoff}
 \end{figure}
 
 Figure \ref{fig:ledoff} shows the circuit in its idle state with both LEDs off before
 acquisition begins.
+
+\clearpage
+This is how the plotting of values in time look:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\textwidth]{img/plot.jpg}
+    \caption{Ploting the sensor values and filtered data}
+    \label{fig:plot}
+\end{figure}

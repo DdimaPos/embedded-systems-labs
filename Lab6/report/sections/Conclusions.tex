@@ -1,40 +1,54 @@
 \section{Conclusion}
 
-Completion of this laboratory work has provided practical understanding of binary signal
+Completion of this laboratory work has provided practical understanding of analog signal
 acquisition and conditioning techniques for embedded sensor systems, and reinforced the
 use of FreeRTOS synchronization primitives for safe inter-task communication.
 
-This fifth laboratory work covered the complete sensor pipeline from raw data acquisition
-to binary alert generation and structured reporting. The key takeaways are:
+This sixth laboratory work covered the complete sensor pipeline from raw data acquisition
+through multi-stage signal conditioning to structured reporting. The key takeaways are:
 
 \begin{enumerate}
-  \item Implementing \textbf{non-blocking sensor acquisition} with the DS18B20 in
-    FreeRTOS context -- by using \texttt{setWaitForConversion(false)} and requesting the
-    next conversion immediately after reading the previous result, the 94\,ms conversion
-    time is hidden inside the 100\,ms task period without blocking the task or the
-    scheduler.
-  \item Applying \textbf{hysteresis} to convert a continuous analog signal into a
-    stable binary alert state -- the two-threshold design (ON $\geq 26\,^\circ$C, OFF
-    $\leq 24\,^\circ$C) creates a dead band that eliminates chattering when the
-    temperature fluctuates near a single set point.
-  \item Combining hysteresis with a \textbf{debounce counter} -- requiring
-    \texttt{DEBOUNCE\_COUNT} $= 3$ consecutive confirmations (300\,ms) before accepting
-    a state transition prevents brief thermal noise spikes from triggering false alerts,
-    which is an essential requirement in industrial sensor conditioning.
+  \item Implementing \textbf{periodic sensor acquisition} with the DHT11 in FreeRTOS
+    context -- the sensor's minimum 2\,second interval between reads defines the
+    acquisition period, and the active sensor is selected from a configurable catalogue,
+    allowing the system to be extended with additional sensor types without modifying
+    the task logic.
+  \item Applying a \textbf{three-stage signal conditioning pipeline}:
+    \begin{itemize}
+      \item \textbf{Saturation} clamps the raw value to the sensor's physical range
+        ($0$--$50\,^\circ$C), rejecting impossible readings at the input boundary.
+      \item \textbf{Median filter} (window = 5) removes salt-and-pepper noise --
+        isolated outlier spikes are eliminated without distorting the underlying
+        temperature trend, as the median is inherently robust to up to
+        $\lfloor n/2 \rfloor$ outliers in the window.
+      \item \textbf{Exponential Moving Average} ($\alpha = 0.2$) provides weighted
+        smoothing where recent samples contribute 20\% and the accumulated history
+        contributes 80\%, yielding a smooth output suitable for display while
+        maintaining adequate responsiveness to real temperature changes.
+    \end{itemize}
+  \item Evaluating \textbf{alert thresholds with hysteresis} (ON $\geq 28\,^\circ$C,
+    OFF $\leq 24\,^\circ$C) on the median-filtered value rather than the heavily
+    smoothed EMA, ensuring that the alert responds promptly to actual temperature
+    crossings while the dead band prevents chattering near the threshold.
   \item Structuring the firmware into three distinct \textbf{FreeRTOS tasks} with
     well-defined roles and priorities: Acquisition (priority 3) runs most frequently and
     ensures fresh data, Conditioning (priority 2) is event-driven via semaphore and
     reacts immediately to new samples, and Reporter (priority 1) provides periodic
     human-readable output without interfering with the control loop.
   \item Using a \textbf{mutex-protected shared data store} (\texttt{SensorData}) as
-    the single source of truth for all sensor state, preventing data races when multiple
-    tasks read or write temperature, alert state, and debounce counters concurrently.
+    the single source of truth for all sensor state -- raw, filtered, and averaged
+    values along with validity and alert state -- preventing data races when multiple
+    tasks read or write concurrently. All configurable pipeline parameters (acquisition
+    period, saturation limits, median window, EMA coefficient, thresholds) are
+    centralized in the \texttt{SensorData.h} header.
   \item Organizing the project into \textbf{three hardware-abstraction layers} (MCAL,
-    ECAL, SRV) with PlatformIO, keeping all hardware-specific code in the MCAL layer
+    ECAL, SRV) with PlatformIO, keeping all hardware-specific code in the MCAL layer,
+    declaring all pin assignments in ECAL driver headers for easy circuit reference,
     and making the service layer fully portable across different MCU platforms.
 \end{enumerate}
 
-This laboratory work demonstrates how a small set of classical signal processing
-techniques -- hysteresis and debouncing -- combined with FreeRTOS synchronization
-primitives, are sufficient to build a robust and noise-resistant binary event detector
-from a raw sensor stream.
+This laboratory work demonstrates how a pipeline of classical signal processing
+techniques -- saturation, median filtering, and exponential moving averaging --
+combined with FreeRTOS synchronization primitives, transforms a noisy raw sensor
+stream into a clean, reliable signal suitable for both display and alert generation
+in an embedded system.

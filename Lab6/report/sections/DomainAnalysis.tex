@@ -1,33 +1,42 @@
 \section{Domain Analysis}
 \subsection{Application Context and Utilized Technologies}
 
-The primary objective of this laboratory work is to implement a \textbf{binary signal
+The primary objective of this laboratory work is to implement an \textbf{analog signal
 acquisition and conditioning system} for a digital temperature sensor using
 \textbf{FreeRTOS} on the ESP32 microcontroller. The application demonstrates a
-complete sensor pipeline: periodic raw data acquisition, hysteresis-based threshold
-detection with debounce filtering, and structured reporting on both an LCD display and
-the serial interface.
+complete sensor pipeline: periodic raw data acquisition, multi-stage signal
+preprocessing (saturation, median filtering, weighted averaging), threshold-based
+alert detection, and structured reporting on both an OLED display and the serial
+interface.
 
-The system uses the \textbf{DS18B20} one-wire digital temperature sensor. The sensor
-communicates over the \textbf{OneWire} protocol on a single GPIO pin (GPIO\,4), and is
-read through the \textit{DallasTemperature} library in a non-blocking configuration
-(9-bit resolution, \texttt{setWaitForConversion(false)}). This pattern issues the
-temperature conversion request in one acquisition cycle and retrieves the result in the
-next, avoiding blocking delays inside the FreeRTOS task.
+The system uses the \textbf{DHT11} digital temperature and humidity sensor. The sensor
+communicates over a proprietary single-wire protocol on GPIO\,4 and is read through the
+\textit{Adafruit DHT} library. The DHT11 requires a minimum interval of approximately
+2\,seconds between consecutive reads, which determines the acquisition task period.
 
-The signal conditioning stage implements two classical digital signal processing
-techniques:
+The signal conditioning stage implements three classical preprocessing techniques
+applied in sequence:
 \begin{itemize}
-  \item \textbf{Hysteresis:} The alert turns \textit{ON} only when the temperature
-    exceeds the upper threshold ($\geq 26\,^\circ$C) and turns \textit{OFF} only when
-    it drops below the lower threshold ($\leq 24\,^\circ$C). While the temperature is
-    between the two thresholds, the alert state remains unchanged. This prevents rapid
-    toggling (chattering) when the signal fluctuates near a single threshold value.
-  \item \textbf{Debounce filter:} A transition is only accepted after the desired new
-    state persists for \texttt{DEBOUNCE\_COUNT} $= 3$ consecutive acquisitions
-    (300\,ms). If the condition is not maintained for the full count, the counter resets
-    and no state change occurs.
+  \item \textbf{Saturation (clamping):} The raw sensor value is clamped to the physical
+    measurement range of the DHT11 ($0$--$50\,^\circ$C). Values outside this range are
+    replaced with the nearest boundary, preventing physically impossible readings from
+    propagating through the pipeline.
+  \item \textbf{Median filter (salt-and-pepper removal):} A sliding window of size 5
+    stores the most recent saturated samples. Each cycle, the window contents are sorted
+    and the median value is selected. This non-linear filter is highly effective at
+    removing isolated outlier spikes without distorting the underlying signal trend.
+  \item \textbf{Exponential Moving Average (EMA):} A first-order IIR low-pass filter
+    with coefficient $\alpha = 0.2$ is applied to the median-filtered output:
+    \[
+      y_n = \alpha \cdot x_n + (1 - \alpha) \cdot y_{n-1}
+    \]
+    This provides weighted smoothing where recent samples contribute more than older
+    ones, reducing high-frequency noise while maintaining responsiveness.
 \end{itemize}
+
+After the full pipeline, alert thresholds with hysteresis (ON $\geq 28\,^\circ$C,
+OFF $\leq 24\,^\circ$C) are evaluated on the median-filtered value to produce a
+stable binary alert state.
 
 Task synchronization is achieved through two FreeRTOS primitives:
 \begin{itemize}
@@ -45,24 +54,33 @@ Task synchronization is achieved through two FreeRTOS primitives:
 \hline
 \textbf{Component} & \textbf{Description \& Role} \\ \hline
 \textbf{ESP32 DevKit} & Dual-core microcontroller running FreeRTOS. Hosts all three
-  application tasks and provides the OneWire-compatible GPIO and I2C peripherals. \\ \hline
-\textbf{DS18B20} & Digital temperature sensor communicating over OneWire protocol on
-  GPIO\,4. 9-bit resolution ($\approx 0.5\,^\circ$C), non-blocking conversion
-  ($\approx 94$\,ms). \\ \hline
+  application tasks and provides GPIO and I2C peripherals. \\ \hline
+\textbf{DHT11} & Digital temperature and humidity sensor on GPIO\,4. Single-wire
+  protocol, $0$--$50\,^\circ$C range, $\pm 2\,^\circ$C accuracy, minimum 2\,s
+  between reads. \\ \hline
 \textbf{Green LED} & Connected to GPIO\,25. Lights up when temperature is within the
   normal range (alert OFF). \\ \hline
 \textbf{Red LED} & Connected to GPIO\,26. Lights up when the temperature alert is active
-  (temperature confirmed above $26\,^\circ$C). \\ \hline
-\textbf{LCD 16$\times$2 I2C} & Connected on the I2C bus (SDA=GPIO\,21, SCL=GPIO\,22),
-  address 0x27. Displays real-time temperature and alert state at 500\,ms intervals. \\ \hline
+  (temperature above $28\,^\circ$C). \\ \hline
+\textbf{OLED 128$\times$64 SSD1306} & Connected on the I2C bus (SDA=GPIO\,21,
+  SCL=GPIO\,22), address 0x3C. Primary display showing raw, filtered, and averaged
+  values plus alert state at 500\,ms intervals. \\ \hline
+\textbf{LCD 20$\times$4 I2C} & Connected on the same I2C bus, address 0x27. Backup
+  display showing averaged temperature and alert state. \\ \hline
 \textbf{$220\,\Omega$ Resistors} & Current-limiting resistors for each LED. \\ \hline
-\textbf{Serial-to-USB Interface} & UART at 115200 baud for periodic report output and
-  CSV plotter data. \\ \hline
+\textbf{$10\,\mathrm{k\Omega}$ Pull-up} & Pull-up resistor on the DHT11 data line
+  to 3.3\,V for reliable communication. \\ \hline
+\textbf{Serial-to-USB Interface} & UART at 115200 baud for serial plotter data
+  (\texttt{>name:value} format) and periodic structured reports. \\ \hline
 \textbf{FreeRTOS} & Built into the ESP32 Arduino core. Provides preemptive task
   scheduling, binary semaphore, and mutex. \\ \hline
 \textbf{PlatformIO} & Build system and IDE integration used for compilation, upload,
   and serial monitoring. \\ \hline
-\textbf{Breadboard} & Prototyping base for connecting the DS18B20, LEDs, pull-up resistor,
+\textbf{Serial Plotter (VS Code)} & VS Code extension for real-time plotting of data
+  received via the serial port. Parses lines starting with \texttt{>} in
+  \texttt{name:value} format and renders interactive time-series graphs, allowing
+  side-by-side comparison of raw, median-filtered, and EMA-smoothed traces. \\ \hline
+\textbf{Breadboard} & Prototyping base for connecting the DHT11, LEDs, OLED, LCD,
   and the ESP32 without soldering. \\ \hline
 \end{tabular}
 \end{center}
@@ -78,35 +96,42 @@ ECAL / SRV pattern:
     \texttt{digitalRead}, and \texttt{analogRead}. All direct register / Arduino
     hardware calls are isolated here.
   \item \textbf{ECAL (Electronic Component Abstraction Layer):} Contains component
-    drivers: \texttt{TempSensor} (DS18B20 via OneWire), \texttt{LedDriver},
-    \texttt{LcdDisplay} (LiquidCrystal\_I2C), and \texttt{SerialIO}. Each module
-    depends only on MCAL or its own library and exposes a clean C API.
+    drivers: \texttt{TempSensor} (DHT11 via Adafruit DHT), \texttt{LedDriver},
+    \texttt{OledDisplay} (Adafruit SSD1306), \texttt{LcdDisplay}
+    (LiquidCrystal\_I2C), and \texttt{SerialIO}. Each module depends only on MCAL
+    or its own library and exposes a clean C API. All pin assignments are declared
+    in the respective header files for easy reference during circuit assembly.
   \item \textbf{SRV (Service Layer):} Contains \texttt{SensorData} (shared data store
-    with mutex/semaphore), and the three FreeRTOS task implementations:
+    with mutex/semaphore, configurable pipeline parameters, and sensor catalogue),
+    and the three FreeRTOS task implementations:
     \texttt{TaskAcquisition}, \texttt{TaskConditioning}, and \texttt{TaskReporter}.
 \end{enumerate}
 
 The data flow proceeds as follows:
 \begin{enumerate}
-  \item \textbf{TaskAcquisition} reads the DS18B20 sensor every 100\,ms, stores the
-    temperature and validity flag in \texttt{SensorData} (under mutex), and gives the
-    \texttt{xSemNewData} binary semaphore.
+  \item \textbf{TaskAcquisition} reads the DHT11 sensor every 2000\,ms, stores the
+    raw temperature and validity flag in \texttt{SensorData} (under mutex), and gives
+    the \texttt{xSemNewData} binary semaphore.
   \item \textbf{TaskConditioning} unblocks immediately on the semaphore, reads the
-    latest temperature, applies the \texttt{ProcessChannel} hysteresis + debounce
-    function, updates the alert state in \texttt{SensorData}, and drives the green/red
-    LEDs accordingly.
+    latest raw temperature, and applies the three-stage pipeline: saturation $\to$
+    median filter $\to$ EMA. It stores the intermediate and final values in
+    \texttt{SensorData}, evaluates alert thresholds with hysteresis, and drives the
+    green/red LEDs accordingly.
   \item \textbf{TaskReporter} runs every 500\,ms via \texttt{vTaskDelayUntil}, reads
-    all shared values under mutex, updates the LCD, emits a CSV line for the serial
-    plotter, and every 5\,seconds prints a full structured report to STDIO.
+    all shared values under mutex, updates the OLED (raw, median, EMA, alert) and LCD
+    (backup), emits a serial plotter line, and every 5\,seconds prints a full
+    structured report to STDIO.
 \end{enumerate}
 
 \subsection{Relevant Case Study}
-A real-world application of hysteresis-based binary signal conditioning is the
-\textbf{thermostat control system} found in HVAC equipment. A simple single-threshold
-comparator would cause the heating element to switch on and off repeatedly when the
-room temperature hovers at exactly the set point, leading to relay wear and unstable
-temperature. The hysteresis band (e.g., set point $\pm 1\,^\circ$C) ensures the heater
-stays on until the temperature is clearly above the upper threshold and stays off until
-clearly below the lower threshold. The debounce timer further prevents brief thermal
-noise spikes from triggering spurious transitions -- a technique directly reflected in
-the \texttt{DEBOUNCE\_COUNT} parameter of this laboratory work.
+A real-world application of multi-stage analog signal conditioning is
+\textbf{environmental monitoring in greenhouse control systems}. Raw temperature
+readings from sensors placed in a greenhouse are subject to several types of noise:
+sudden spikes from direct sunlight on the sensor (salt-and-pepper noise), electrical
+interference from nearby irrigation pumps, and gradual drift. A saturation stage
+rejects physically impossible readings (e.g., $-40\,^\circ$C indoors), a median filter
+removes the isolated spikes without smoothing away real temperature changes, and a
+weighted moving average provides the stable baseline needed for climate control
+decisions. Alert thresholds with hysteresis then trigger ventilation or heating
+actuators without the rapid on/off cycling that would occur with a single-threshold
+comparator -- a pipeline directly reflected in this laboratory work.

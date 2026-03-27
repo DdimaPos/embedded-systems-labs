@@ -1,26 +1,28 @@
 \section{Purpose of laboratory work}
 
-The purpose of this laboratory work is to implement a binary signal acquisition and
+The purpose of this laboratory work is to implement an analog signal acquisition and
 conditioning system for a digital temperature sensor on the ESP32 microcontroller,
-using FreeRTOS for concurrent task execution and an LCD display plus STDIO for reporting.
+using FreeRTOS for concurrent task execution and an OLED display plus STDIO for reporting.
 
 \subsection{Objectives of the laboratory work}
 
 Laboratory work has the following objectives that should be achieved:
 
 \begin{itemize}
-  \item Implementing periodic sensor acquisition from a DS18B20 digital temperature
-    sensor over the OneWire protocol at a configurable recurrence (100\,ms), exposing
-    the raw value through an internal \texttt{sensor\_read()} interface
-  \item Implementing binary signal conditioning with configurable hysteresis between
-    two threshold values ($26\,^\circ$C ON / $24\,^\circ$C OFF) to prevent alert
-    oscillations near the threshold
-  \item Implementing a debounce filter that requires the threshold condition to be
-    confirmed over a minimum number of consecutive samples (3 $\times$ 100\,ms = 300\,ms)
-    before the alert state transitions
-  \item Displaying a structured report at a lower recurrence (500\,ms) on an LCD 16$\times$2
-    display and via STDIO, showing the current temperature, threshold values, alert state,
-    and debounce counter
+  \item Implementing periodic sensor acquisition from a DHT11 digital temperature
+    sensor at a configurable recurrence (2000\,ms), exposing
+    the raw value through an internal \texttt{sensor\_read()} interface, with
+    support for selecting a sensor from a catalogue of available sensors
+  \item Implementing analog signal conditioning through a three-stage preprocessing
+    pipeline: saturation (clamping to the sensor's physical range $0$--$50\,^\circ$C),
+    a median filter (window size~5) for salt-and-pepper noise removal, and an
+    exponential moving average (EMA, $\alpha = 0.2$) for weighted smoothing
+  \item Evaluating alert thresholds on the processed signal with hysteresis
+    (ON $\geq 28\,^\circ$C, OFF $\leq 24\,^\circ$C) to generate a stable binary
+    alert state that drives LED indicators
+  \item Displaying a structured report at a lower recurrence (500\,ms) on an OLED
+    128$\times$64 display and via STDIO, showing the raw, median-filtered, and
+    EMA-averaged temperature values, sensor validity, and alert state
   \item Structuring the firmware into three independent FreeRTOS tasks (Acquisition,
     Conditioning, Reporter) communicating through a binary semaphore and a mutex
   \item Organizing the codebase into three hardware-abstraction layers: MCAL, ECAL, and SRV
@@ -32,20 +34,29 @@ The application must be structured in three distinct FreeRTOS tasks:
 
 \begin{enumerate}
   \item \textbf{Task 1 -- Sensor Acquisition (TaskAcquisition):} Reads raw temperature
-    data from the DS18B20 sensor via the OneWire protocol every 100\,ms using a
-    non-blocking conversion pattern. Stores the result in shared sensor data and gives
-    a binary semaphore to signal the conditioning task.
+    data from the currently selected sensor (DHT11) every 2000\,ms. The active sensor
+    is chosen at startup from a sensor catalogue. The raw value is stored in shared
+    sensor data and a binary semaphore is given to signal the conditioning task.
 
   \item \textbf{Task 2 -- Signal Conditioning (TaskConditioning):} Blocked on the binary
-    semaphore; wakes immediately when new sensor data arrives. Applies a hysteresis filter
-    (thresholds: ON $\geq 26\,^\circ$C, OFF $\leq 24\,^\circ$C) and a debounce counter
-    (3 consecutive confirmations required) to derive the stable binary alert state.
-    Updates LED indicators: green LED when temperature is within normal range, red LED
-    when the alert is active.
+    semaphore; wakes immediately when new sensor data arrives. Applies a three-stage
+    preprocessing pipeline:
+    \begin{enumerate}
+      \item \textbf{Saturation} -- clamps the raw value to the physical range of the
+        sensor ($0$--$50\,^\circ$C for DHT11)
+      \item \textbf{Median filter} (window = 5) -- removes salt-and-pepper outliers by
+        sorting the last 5 saturated samples and selecting the median
+      \item \textbf{Exponential Moving Average} ($\alpha = 0.2$) -- applies weighted
+        smoothing: $y_n = \alpha \cdot x_n + (1 - \alpha) \cdot y_{n-1}$
+    \end{enumerate}
+    After filtering, the task evaluates alert thresholds with hysteresis
+    (ON $\geq 28\,^\circ$C, OFF $\leq 24\,^\circ$C) and updates LED indicators:
+    green LED when temperature is within normal range, red LED when the alert is active.
 
   \item \textbf{Task 3 -- Display and Reporting (TaskReporter):} Runs every 500\,ms
-    using \texttt{vTaskDelayUntil} for drift-corrected periodicity. Updates the LCD
-    16$\times$2 display with the current temperature and alert state, and emits a CSV
-    plotter line via \texttt{printf}. Every 5\,seconds it also prints a full structured
-    report including validity, alert state, debounce counter, and threshold configuration.
+    using \texttt{vTaskDelayUntil} for drift-corrected periodicity. Updates the OLED
+    128$\times$64 display with all intermediate pipeline values (raw, median-filtered,
+    EMA-averaged), sensor name, and alert state. Emits a serial plotter line in the
+    \texttt{>name:value} format and every 5\,seconds prints a full structured report
+    including pipeline parameters and threshold configuration.
 \end{enumerate}

@@ -1,0 +1,69 @@
+\section{Conclusion}
+
+Completion of this laboratory work has provided practical understanding of actuator
+control techniques for embedded systems, including analog PWM motor control, binary
+relay control, and a multi-stage command conditioning pipeline, while reinforcing the
+use of FreeRTOS synchronization primitives for safe inter-task communication.
+
+This seventh laboratory work covered the complete actuator control pipeline from serial
+command reception through multi-stage command conditioning to hardware actuation and
+structured reporting. The key takeaways are:
+
+\begin{enumerate}
+  \item Implementing a \textbf{serial command interface} in FreeRTOS context -- the
+    command task polls the serial port every 50\,ms, parses case-insensitive commands,
+    validates ranges, and signals the conditioning task via semaphore, keeping the
+    command parsing decoupled from the conditioning logic.
+  \item Applying a \textbf{four-stage command conditioning pipeline}:
+    \begin{itemize}
+      \item \textbf{Saturation} clamps the raw command to the valid actuator range
+        ($0$--$100\,\%$), rejecting physically impossible targets at the input boundary.
+      \item \textbf{Median filter} (window = 5) removes impulsive command noise --
+        isolated wrong commands are eliminated without distorting the underlying
+        command trend, as the median is inherently robust to up to
+        $\lfloor n/2 \rfloor$ outliers in the window.
+      \item \textbf{Exponential Moving Average} ($\alpha = 0.3$) provides weighted
+        smoothing where recent commands contribute 30\% and the accumulated history
+        contributes 70\%, reducing abrupt step changes visible to the actuator.
+      \item \textbf{Ramping} ($2\,\%$ per 50\,ms cycle) limits the rate of change
+        of \texttt{currentSpeed}, protecting the motor from sudden current surges and
+        implementing smooth acceleration and deceleration ($\approx 2.5\,\mathrm{s}$
+        for a full 0--100\,\% ramp). The motor state machine (IDLE / RAMP\_UP /
+        RUNNING / RAMP\_DOWN) makes the ramp phase clearly visible on the OLED and
+        in the serial plotter.
+    \end{itemize}
+  \item Implementing an \textbf{emergency stop} (\texttt{X}) that bypasses the
+    conditioning pipeline entirely -- \texttt{currentSpeed} is set to zero immediately,
+    all filter state (median buffer, EMA accumulator) is reset, and the motor stops
+    without any ramp. This demonstrates the importance of having a safety override
+    path independent of the normal control loop.
+  \item Controlling an \textbf{analog actuator} (DC motor via L298N) using the ESP32
+    LEDC peripheral: channel~0, 5\,kHz, 8-bit resolution, with direction pins managed
+    separately. The MotorDriver API (Init / SetSpeed / SetDirection / Stop / GetDuty)
+    is structured so that swapping the test LED for a real motor requires zero code
+    changes.
+  \item Controlling a \textbf{binary actuator} (relay) with a simple ON/OFF API and
+    state tracking in shared data. The relay is only written when its target differs
+    from the current state, avoiding redundant GPIO writes.
+  \item Evaluating \textbf{alert conditions} (OVERLOAD $\geq 95\,\%$,
+    LIMIT\_REACHED at boundaries) on the conditioned speed and driving LED indicators
+    accordingly, providing clear visual feedback about the actuator's operating region.
+  \item Structuring the firmware into four distinct \textbf{FreeRTOS tasks} with
+    well-defined roles and priorities: Command (priority 3) ensures serial input is
+    never missed, Conditioning and Actuator (priority 2) run the control loop, and
+    Reporter (priority 1) provides periodic human-readable output without interfering
+    with the control loop.
+  \item Using a \textbf{mutex-protected shared data store} (\texttt{ActuatorData}) as
+    the single source of truth for all actuator state -- target, conditioned, and
+    current speed; direction; motor state; relay states; and alerts -- preventing
+    data races when four tasks read or write concurrently.
+  \item Organizing the project into \textbf{three hardware-abstraction layers} (MCAL,
+    ECAL, SRV) with PlatformIO, keeping all hardware-specific code in the MCAL layer
+    and making the service layer fully portable across different MCU platforms.
+\end{enumerate}
+
+This laboratory work demonstrates how a pipeline of classical command processing
+techniques -- saturation, median filtering, exponential moving averaging, and ramping --
+combined with FreeRTOS synchronization primitives, transforms raw serial commands into
+smooth, safe actuator control suitable for both analog (PWM motor) and binary (relay)
+actuators in an embedded system.
