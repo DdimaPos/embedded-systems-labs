@@ -1,0 +1,84 @@
+\section{Purpose of laboratory work}
+
+The purpose of this laboratory work is to implement an \textbf{actuator control system}
+on the ESP32 microcontroller using FreeRTOS for concurrent task execution. The system
+controls two actuators -- an analog actuator (DC motor via L298N PWM) and a binary
+actuator (relay module) -- with commands received over serial, a signal conditioning
+pipeline, and real-time reporting on an OLED display.
+This is Variant~C (100\%), requiring both analog and binary actuator control.
+
+\textbf{Hardware note:} During initial development and testing, an LED connected to
+GPIO~18 (ENA pin of the L298N) with a $220\,\Omega$ resistor was used in place of a
+DC motor, as the motor was not yet available. The LED brightness varies proportionally
+with the PWM duty cycle, allowing the ramp-up, ramp-down, and speed control behavior
+to be visually verified. During the actual laboratory presentation, the system was
+demonstrated with a real \textbf{DC motor connected through the L298N H-bridge driver},
+which responded correctly to all speed, direction, and emergency stop commands.
+The L298N direction pins (GPIO~16, GPIO~17) were wired and driven correctly throughout.
+The driver abstraction design ensured that no code changes were required when
+switching from the LED to the motor.
+
+\subsection{Objectives of the laboratory work}
+
+Laboratory work has the following objectives that should be achieved:
+
+\begin{itemize}
+  \item Implementing a serial command interface for receiving actuator commands
+    (\texttt{S<0-100>}, \texttt{DF}, \texttt{DR}, \texttt{X}, \texttt{RON},
+    \texttt{ROFF}, \texttt{?}) at a 50\,ms polling period
+  \item Implementing analog actuator control through a four-stage command conditioning
+    pipeline: saturation (clamping to $0$--$100\,\%$), a median filter (window size~5)
+    for impulsive command noise removal, an exponential moving average
+    (EMA, $\alpha = 0.3$) for smoothing, and a ramping stage ($2\,\%$ per 50\,ms cycle)
+    that limits the rate of change applied to the motor
+  \item Controlling a DC motor (L298N, GPIO~16/17/18) via PWM (LEDC 5\,kHz, 8-bit)
+    with direction control (forward/reverse) and an emergency stop that bypasses the
+    ramp and resets all filters
+  \item Controlling a single-channel relay module (GPIO~19, active-HIGH) as a binary
+    actuator with ON/OFF target tracking
+  \item Evaluating alert conditions (OVERLOAD $\geq 95\,\%$, LIMIT\_REACHED at
+    $0\,\%$ or $100\,\%$) and driving LED indicators accordingly
+  \item Displaying a structured report at 500\,ms on an OLED 128$\times$64 display
+    showing motor state, direction, target/conditioned/current speed, relay state,
+    and alert; emitting a serial plotter line every 500\,ms
+  \item Structuring the firmware into four independent FreeRTOS tasks (Command,
+    Conditioning, Actuator, Reporter) communicating through a binary semaphore and a mutex
+  \item Organizing the codebase into three hardware-abstraction layers: MCAL, ECAL,
+    and SRV
+\end{itemize}
+
+\subsection{Problem definition}
+
+The application is structured in four distinct FreeRTOS tasks:
+
+\begin{enumerate}
+  \item \textbf{Task 1 -- Command (TaskCommand):} Non-blocking serial read every 50\,ms.
+    Parses commands, validates ranges, stores target speed, direction, relay target, and
+    emergency stop flag in shared \texttt{ActuatorData}. Signals the conditioning task via
+    a binary semaphore after each valid speed command.
+
+  \item \textbf{Task 2 -- Signal Conditioning (TaskConditioning):} Runs every 50\,ms,
+    blocked on the binary semaphore with timeout. Applies a four-stage pipeline:
+    \begin{enumerate}
+      \item \textbf{Saturation} -- clamps the target to $0$--$100\,\%$
+      \item \textbf{Median filter} (window = 5) -- removes impulsive command noise
+      \item \textbf{Exponential Moving Average} ($\alpha = 0.3$) -- smooths fluctuations:
+        $y_n = \alpha \cdot x_n + (1 - \alpha) \cdot y_{n-1}$
+      \item \textbf{Ramping} -- increments \texttt{currentSpeed} toward
+        \texttt{conditionedSpeed} by at most $2\,\%$ per cycle ($\approx 2.5\,\mathrm{s}$
+        full ramp), manages motor state transitions (IDLE / RAMP\_UP / RUNNING /
+        RAMP\_DOWN)
+    \end{enumerate}
+    Evaluates alerts and drives green/red LED indicators.
+
+  \item \textbf{Task 3 -- Actuator (TaskActuator):} Runs every 50\,ms. Reads
+    \texttt{currentSpeed} and \texttt{direction} from \texttt{ActuatorData}, maps
+    $0$--$100\,\%$ to PWM duty $0$--$255$ and applies it via the L298N LEDC driver.
+    Reads \texttt{relayTarget} and applies it to the relay driver when it differs from
+    the current relay state.
+
+  \item \textbf{Task 4 -- Reporter (TaskReporter):} Runs every 500\,ms using
+    \texttt{vTaskDelayUntil}. Updates the OLED 128$\times$64 with all actuator state
+    fields, emits a serial plotter line in \texttt{>name:value} format, and every
+    5\,seconds prints a full structured report to STDIO.
+\end{enumerate}

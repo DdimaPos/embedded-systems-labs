@@ -1,0 +1,53 @@
+\appendix
+\section{Source Code}
+
+\subsection{Main Entry Point}
+\lstinputlisting[caption={main.cpp - Application Entry Point}, label={lst:main}]{../src/main.cpp}
+
+\subsection{MCAL Layer}
+\lstinputlisting[caption={GpioDriver.h - GPIO Abstraction Header}, label={lst:gpio-h}]{../lib/MCAL/GpioDriver/GpioDriver.h}
+
+\lstinputlisting[caption={GpioDriver.cpp - GPIO Abstraction Implementation}, label={lst:gpio-cpp}]{../lib/MCAL/GpioDriver/GpioDriver.cpp}
+
+\subsection{ECAL Layer -- Actuator Drivers and Peripherals}
+\lstinputlisting[caption={MotorDriver.h - L298N PWM Driver Header}, label={lst:motor-h}]{../lib/ECAL/MotorDriver/MotorDriver.h}
+
+\lstinputlisting[caption={MotorDriver.cpp - L298N PWM Driver Implementation}, label={lst:motor-cpp}]{../lib/ECAL/MotorDriver/MotorDriver.cpp}
+
+\lstinputlisting[caption={RelayDriver.h - Relay Driver Header}, label={lst:relay-h}]{../lib/ECAL/RelayDriver/RelayDriver.h}
+
+\lstinputlisting[caption={RelayDriver.cpp - Relay Driver Implementation}, label={lst:relay-cpp}]{../lib/ECAL/RelayDriver/RelayDriver.cpp}
+
+\lstinputlisting[caption={LedDriver.h - LED Driver Header}, label={lst:led-h}]{../lib/ECAL/LedDriver/LedDriver.h}
+
+\lstinputlisting[caption={LedDriver.cpp - LED Driver Implementation}, label={lst:led-cpp}]{../lib/ECAL/LedDriver/LedDriver.cpp}
+
+\lstinputlisting[caption={OledDisplay.h - OLED SSD1306 Driver Header}, label={lst:oled-h}]{../lib/ECAL/OledDisplay/OledDisplay.h}
+
+\lstinputlisting[caption={OledDisplay.cpp - OLED SSD1306 Driver Implementation}, label={lst:oled-cpp}]{../lib/ECAL/OledDisplay/OledDisplay.cpp}
+
+\lstinputlisting[caption={SerialIO.h - Serial Initialization Header}, label={lst:serial-h}]{../lib/ECAL/SerialIO/SerialIO.h}
+
+\lstinputlisting[caption={SerialIO.cpp - Serial Initialization Implementation}, label={lst:serial-cpp}]{../lib/ECAL/SerialIO/SerialIO.cpp}
+
+\subsection{SRV Layer -- Shared Data}
+\lstinputlisting[caption={ActuatorData.h - Shared Actuator Data Header}, label={lst:data-h}]{../lib/SRV/ActuatorData/ActuatorData.h}
+
+\lstinputlisting[caption={ActuatorData.cpp - Shared Actuator Data Implementation}, label={lst:data-cpp}]{../lib/SRV/ActuatorData/ActuatorData.cpp}
+
+\subsection{SRV Layer -- FreeRTOS Tasks}
+\lstinputlisting[caption={TaskCommand.h - Command Task Header}, label={lst:cmd-h}]{../lib/SRV/TaskCommand/TaskCommand.h}
+
+\lstinputlisting[caption={TaskCommand.cpp - Command Task Implementation}, label={lst:cmd-cpp}]{../lib/SRV/TaskCommand/TaskCommand.cpp}
+
+\lstinputlisting[caption={TaskConditioning.h - Conditioning Task Header}, label={lst:cond-h}]{../lib/SRV/TaskConditioning/TaskConditioning.h}
+
+\lstinputlisting[caption={TaskConditioning.cpp - Conditioning Task Implementation}, label={lst:cond-cpp}]{../lib/SRV/TaskConditioning/TaskConditioning.cpp}
+
+\lstinputlisting[caption={TaskActuator.h - Actuator Task Header}, label={lst:act-h}]{../lib/SRV/TaskActuator/TaskActuator.h}
+
+\lstinputlisting[caption={TaskActuator.cpp - Actuator Task Implementation}, label={lst:act-cpp}]{../lib/SRV/TaskActuator/TaskActuator.cpp}
+
+\lstinputlisting[caption={TaskReporter.h - Reporter Task Header}, label={lst:rep-h}]{../lib/SRV/TaskReporter/TaskReporter.h}
+
+\lstinputlisting[caption={TaskReporter.cpp - Reporter Task Implementation}, label={lst:rep-cpp}]{../lib/SRV/TaskReporter/TaskReporter.cpp}

@@ -1,0 +1,131 @@
+\section{Results}
+
+For running the application the following commands were used for compiling,
+uploading the project and monitoring the port to observe the periodic reports.
+
+\begin{verbatim}
+# list connected boards and their ports
+pio device list
+# compile and upload to ESP32
+pio run --target upload
+# open serial monitor at 115200 baud
+pio device monitor --baud 115200
+\end{verbatim}
+
+Below is the startup banner and sample serial output of the system:
+
+\begin{verbatim}
+==========================================
+  Lab 7 - Actuator Control System (Var C)
+==========================================
+Analog  : L298 PWM on GPIO18 (LED test)
+          IN1=GPIO16  IN2=GPIO17
+Binary  : Relay on GPIO19 (active-HIGH)
+Pipeline: Sat -> Median(5) -> EMA(a=0.30) -> Ramp(2/cyc)
+Overload: >= 95%
+Commands: S<0-100> DF DR X RON ROFF ?
+==========================================
+
+[CMD] Speed target -> 50%
+>target:50,cond:8.0,current:4.0,relay:0
+>target:50,cond:18.4,current:10.0,relay:0
+>target:50,cond:26.9,current:16.0,relay:0
+
+===== ACTUATOR REPORT (t=5000 ms) =====
+Target speed  : 50%
+Conditioned   : 44.2%  (median=5, EMA alpha=0.30)
+Current speed : 40.0%  (ramp step=2/cyc)
+Direction     : FORWARD
+Motor state   : RAMP_UP
+Relay         : OFF
+Alert         : NONE
+PWM duty      : 102/255
+======================================
+
+[CMD] Speed target -> 100%
+>target:100,cond:95.0,current:80.0,relay:0
+[CMD] Relay -> ON
+>target:100,cond:98.0,current:82.0,relay:1
+
+===== ACTUATOR REPORT (t=10000 ms) =====
+Target speed  : 100%
+Conditioned   : 99.1%  (median=5, EMA alpha=0.30)
+Current speed : 88.0%  (ramp step=2/cyc)
+Direction     : FORWARD
+Motor state   : RAMP_UP
+Relay         : ON
+Alert         : OVERLOAD
+PWM duty      : 224/255
+======================================
+
+[CMD] EMERGENCY STOP
+>target:0,cond:0.0,current:0.0,relay:1
+\end{verbatim}
+
+\textbf{Hardware note:} The photographs in this section show an LED connected to
+GPIO~18 (ENA) in place of a DC motor, as the motor was not available at the time the
+photos were taken. The LED brightness is proportional to the PWM duty cycle and
+visually confirms the ramping, smoothing, and speed control behavior. During the
+actual laboratory presentation, however, a real \textbf{DC motor connected through
+the L298N H-bridge driver} was used. The motor responded correctly to all speed,
+direction, and emergency stop commands, demonstrating the full analog actuator
+control pipeline on real hardware. No code changes were required to switch from the
+LED to the motor, confirming the driver abstraction design.
+
+The system behavior is as follows:
+\begin{itemize}
+  \item At startup, the OLED shows \texttt{-- Actuator Ctrl --} / \texttt{Lab7 Variant C}
+    / \texttt{Starting...} for 1\,second while all modules initialize.
+  \item After a speed command (e.g., \texttt{S50}), \texttt{currentSpeed} increments
+    by $2\,\%$ every 50\,ms, with the OLED showing the motor state transition from
+    IDLE $\to$ RAMP\_UP $\to$ RUNNING. The LED on GPIO~18 brightens gradually,
+    visually confirming the ramp behavior in place of a real motor.
+  \item The \textbf{conditioned speed} lags the target due to the median and EMA filters.
+    Rapid command changes (e.g., \texttt{S10} then \texttt{S90} then \texttt{S30})
+    are smoothed, and the ramp ensures the LED brightness changes at a controlled rate.
+  \item Sending \texttt{S100} causes the conditioned speed to reach $\geq 95\,\%$,
+    triggering \textbf{OVERLOAD} alert: the red LED turns on, the green LED turns off,
+    and the OLED shows \texttt{Alrt:OVERLD}.
+  \item Sending \texttt{S0} causes the motor state to transition to RAMP\_DOWN and
+    eventually IDLE. Sending \texttt{X} instead causes an \textbf{immediate} stop
+    (no ramping), resetting all filter state.
+  \item \texttt{DR} followed by \texttt{S50} swaps the IN1/IN2 direction pins --
+    the motor would reverse; the LED brightness is unchanged.
+  \item \texttt{RON} energizes the relay (GPIO~19 HIGH) and the OLED shows
+    \texttt{Relay: ON}. \texttt{ROFF} de-energizes it.
+  \item \texttt{?} prints a full status dump to the serial terminal at any time.
+  \item The serial plotter line \texttt{>target:X,cond:Y,current:Z,relay:R} is emitted
+    every 500\,ms. When visualized in the VS Code Serial Plotter extension, the three
+    speed traces show the filtering and ramp effects clearly: \texttt{target} steps
+    instantly, \texttt{cond} follows with smoothing lag, and \texttt{current} ramps
+    at a constant slope.
+  \item Entering \texttt{S150} is rejected with an error message and clamped to
+    $100\,\%$ before entering the pipeline.
+\end{itemize}
+
+\clearpage
+Below is the visual representation of the circuit:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/ledoff.jpg}
+    \caption{Circuit during development -- LED used as analog actuator substitute}
+    \label{fig:ledoff}
+\end{figure}
+
+Figure \ref{fig:ledoff} shows the circuit during the development phase, with an LED
+on GPIO~18 acting as a visual substitute for the DC motor. Note that during the actual
+laboratory presentation the LED was replaced by a real DC motor connected through the
+L298N H-bridge driver.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{img/ledon.jpg}
+    \caption{Circuit at maximum output -- relay ON and full PWM duty (LED substitute)}
+    \label{fig:ledon}
+\end{figure}
+
+Figure \ref{fig:ledon} shows the circuit at maximum speed command (\texttt{S100})
+with the relay energized. The PWM LED is at full brightness, representing 100\% duty
+cycle. During the presentation this same state drove the DC motor at full speed through
+the L298N driver.

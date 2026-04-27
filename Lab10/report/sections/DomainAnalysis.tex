@@ -1,0 +1,151 @@
+\section{Domain Analysis}
+\subsection{Application Context and Utilized Technologies}
+
+The primary objective of this laboratory work is to implement an \textbf{actuator
+control system} for both an analog and a binary actuator using \textbf{FreeRTOS} on
+the ESP32 microcontroller. The application demonstrates a complete actuator pipeline:
+serial command reception, multi-stage command conditioning (saturation, median filtering,
+EMA smoothing, ramping), alert detection, and structured reporting on an OLED display
+and via serial.
+
+The \textbf{analog actuator} is a DC motor connected through an \textbf{L298N} dual
+H-bridge driver. GPIO~16 and GPIO~17 are used as direction pins (IN1/IN2), while
+GPIO~18 is the PWM speed pin (ENA). The ESP32's LEDC peripheral generates a 5\,kHz
+PWM signal with 8-bit resolution (0--255 duty cycle). In this implementation a
+\textbf{PWM-driven LED} is connected to GPIO~18 in place of the motor, so that the
+ramping and speed control can be visually verified without motor hardware.
+
+The \textbf{binary actuator} is a \textbf{1-channel active-HIGH relay module} on
+GPIO~19. The relay is energized or de-energized by a single digital output, and its
+state is tracked in shared data to avoid redundant writes.
+
+The command conditioning stage implements four classical techniques applied in sequence:
+
+\begin{itemize}
+  \item \textbf{Saturation (clamping):} The raw command value is clamped to the valid
+    actuator range of $0$--$100\,\%$. Out-of-range commands are rejected with an error
+    message and clamped, preventing impossible targets from entering the pipeline.
+  \item \textbf{Median filter} (window = 5): A sliding window stores the five most
+    recent saturated targets. Each cycle the window is sorted and the median is selected.
+    This non-linear filter is highly effective at removing isolated impulsive noise
+    (e.g., a momentary wrong command) without distorting the underlying command trend.
+  \item \textbf{Exponential Moving Average (EMA):} A first-order IIR low-pass filter
+    with coefficient $\alpha = 0.3$ is applied to the median-filtered output:
+    \[
+      y_n = \alpha \cdot x_n + (1 - \alpha) \cdot y_{n-1}
+    \]
+    This provides weighted smoothing where recent commands contribute 30\% and the
+    accumulated history contributes 70\%, reducing abrupt step changes.
+  \item \textbf{Ramping:} The \texttt{currentSpeed} variable is incremented or
+    decremented toward \texttt{conditionedSpeed} by a fixed step of $2\,\%$ per 50\,ms
+    cycle ($\approx 2.5\,\mathrm{s}$ for a full 0--100\,\% ramp). This limits the
+    rate of change delivered to the motor, protecting it from sudden current surges.
+    An \textbf{emergency stop} (command \texttt{X}) bypasses the ramp entirely and
+    sets \texttt{currentSpeed} to zero immediately, also resetting all filter state.
+\end{itemize}
+
+After the full pipeline, alert conditions are evaluated:
+\begin{itemize}
+  \item \textbf{OVERLOAD} -- conditioned speed $\geq 95\,\%$
+  \item \textbf{LIMIT\_REACHED} -- conditioned speed at $0\,\%$ or $100\,\%$
+\end{itemize}
+
+Task synchronization uses two FreeRTOS primitives:
+\begin{itemize}
+  \item A \textbf{binary semaphore} (\texttt{xSemNewCommand}) given by TaskCommand
+    after each valid speed command and taken by TaskConditioning, ensuring the
+    conditioning pipeline runs on new data
+  \item A \textbf{mutex} (\texttt{xActuatorMutex}) protecting all shared actuator
+    state fields against concurrent access by the four tasks
+\end{itemize}
+
+\subsection{Hardware and Software Components}
+
+\begin{center}
+\begin{tabular}{| p{4cm} | p{10cm} |}
+\hline
+\textbf{Component} & \textbf{Description \& Role} \\ \hline
+\textbf{ESP32 DevKit} & Dual-core microcontroller running FreeRTOS. Hosts all four
+  application tasks and provides GPIO, LEDC PWM, I2C, and UART peripherals. \\ \hline
+\textbf{L298N H-bridge} & Dual H-bridge motor driver. IN1=GPIO\,16, IN2=GPIO\,17
+  (direction), ENA=GPIO\,18 (PWM speed). Logic supply 5\,V; motor supply up to
+  46\,V. \\ \hline
+\textbf{LED (PWM test)} & Connected to GPIO\,18 (ENA) via a $220\,\Omega$ resistor.
+  Simulates motor speed response; brightness proportional to duty cycle
+  (0--255). \\ \hline
+\textbf{Relay module} & 1-channel active-HIGH relay on GPIO\,19. Energized by
+  \texttt{RON}, de-energized by \texttt{ROFF}. VCC from 5\,V rail. \\ \hline
+\textbf{Green LED} & Connected to GPIO\,25. ON when no alert is active
+  (system OK). \\ \hline
+\textbf{Red LED} & Connected to GPIO\,26. ON when alert is active (OVERLOAD or
+  LIMIT\_REACHED). \\ \hline
+\textbf{OLED 128$\times$64 SSD1306} & I2C bus (SDA=GPIO\,21, SCL=GPIO\,22),
+  address 0x3C. Displays motor state, direction, target/conditioned/current speed,
+  relay state, and alert at 500\,ms. \\ \hline
+\textbf{$220\,\Omega$ Resistors} & Current-limiting resistors for each LED. \\ \hline
+\textbf{Serial-to-USB Interface} & UART at 115200 baud for command input and
+  serial plotter output (\texttt{>name:value} format). \\ \hline
+\textbf{FreeRTOS} & Built into the ESP32 Arduino core. Provides preemptive task
+  scheduling, binary semaphore, and mutex primitives. \\ \hline
+\textbf{PlatformIO} & Build system used for compilation, upload, and serial
+  monitoring. \\ \hline
+\textbf{Serial Plotter (VS Code)} & VS Code extension for real-time plotting of
+  \texttt{>name:value} data. Displays target, conditioned, and current speed
+  traces side by side to visualize the ramp and filter effects. \\ \hline
+\textbf{Breadboard} & Prototyping base for connecting all components without
+  soldering. \\ \hline
+\end{tabular}
+\end{center}
+
+\subsection{System Architecture and Solution Justification}
+
+The system is organized into three hardware-abstraction layers following the MCAL /
+ECAL / SRV pattern:
+
+\begin{enumerate}
+  \item \textbf{MCAL (Microcontroller Abstraction Layer):} Contains only
+    \texttt{GpioDriver}, which wraps \texttt{pinMode}, \texttt{digitalWrite}, and
+    \texttt{digitalRead}. All direct Arduino hardware calls are isolated here.
+  \item \textbf{ECAL (Electronic Component Abstraction Layer):} Contains component
+    drivers: \texttt{MotorDriver} (L298N LEDC PWM + direction pins),
+    \texttt{RelayDriver} (single GPIO on/off), \texttt{LedDriver} (two status LEDs),
+    \texttt{OledDisplay} (Adafruit SSD1306), and \texttt{SerialIO} (UART init).
+    Each driver header declares its pin assignments for easy circuit reference.
+  \item \textbf{SRV (Service Layer):} Contains \texttt{ActuatorData} (shared data
+    store with mutex/semaphore and all configurable parameters) and the four FreeRTOS
+    task implementations: \texttt{TaskCommand}, \texttt{TaskConditioning},
+    \texttt{TaskActuator}, and \texttt{TaskReporter}.
+\end{enumerate}
+
+The data flow proceeds as follows:
+\begin{enumerate}
+  \item \textbf{TaskCommand} polls the serial port every 50\,ms. On a valid speed
+    command it stores \texttt{targetSpeed} in \texttt{ActuatorData} and gives
+    \texttt{xSemNewCommand}. Direction, relay, and emergency stop commands are
+    applied immediately without signaling.
+  \item \textbf{TaskConditioning} runs every 50\,ms (semaphore with timeout). It
+    applies the four-stage pipeline (saturation $\to$ median $\to$ EMA $\to$ ramp),
+    stores intermediate values, updates \texttt{motorState}, evaluates alerts, and
+    drives the LEDs.
+  \item \textbf{TaskActuator} runs every 50\,ms. It reads \texttt{currentSpeed} and
+    \texttt{direction}, maps speed to a 0--255 duty cycle, and calls
+    \texttt{MotorDriver\_SetDirection} + \texttt{MotorDriver\_SetSpeed} (or
+    \texttt{MotorDriver\_Stop} when speed $< 1\,\%$). It also compares
+    \texttt{relayTarget} with \texttt{relayState} and calls \texttt{RelayDriver\_On/Off}
+    on a change.
+  \item \textbf{TaskReporter} runs every 500\,ms. It reads all shared values, updates
+    the OLED, emits a serial plotter line, and every 5\,seconds prints a full structured
+    report to STDIO.
+\end{enumerate}
+
+\subsection{Relevant Case Study}
+A real-world application of command conditioning with ramping and relay control is
+\textbf{industrial conveyor belt systems}. Speed set-points from an operator console
+are subject to operator mistakes (an accidentally typed \texttt{150\,\%}) and
+communication glitches (isolated burst errors). A saturation stage rejects out-of-range
+set-points, a median filter absorbs isolated bursts, and a weighted moving average
+smooths repeated small adjustments. The ramping stage then ensures the belt motor
+accelerates and decelerates within its mechanical limits, preventing belt slip and
+mechanical stress. A relay control simultaneously switches auxiliary equipment
+(e.g., a diverter gate) on or off based on the operator command -- the exact two-actuator
+pattern implemented in this laboratory work.
